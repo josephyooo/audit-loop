@@ -179,7 +179,9 @@ Update state.json: set `last_trigger` to `ADDRESS: revise PR #N`, update `last_t
 
 4. Address each review comment with targeted fixes.
 
-5. If tests/lint are available, run them. If tests fail:
+5. **Discover and run the project's linter/formatter** (same discovery as "Fix a batch" step 5). Fix auto-fixable errors before committing.
+
+6. If tests/lint fail:
    ```bash
    gh pr edit N --add-label "tests-failing"
    ```
@@ -190,13 +192,13 @@ Update state.json: set `last_trigger` to `ADDRESS: revise PR #N`, update `last_t
    gh pr edit N --remove-label "tests-failing"
    ```
 
-6. Update the revision marker in the PR body. Read current body, find or insert:
+7. Update the revision marker in the PR body. Read current body, find or insert:
    ```
    <!-- audit-revision: N -->
    ```
    Update N to the current `revision_round` from state.json.
 
-7. Commit, push, notify Codex:
+8. **Stage and commit.** Apply the same secret file exclusion as "Fix a batch" step 7 — never stage `.env`, credentials, keys, etc. Use explicit file paths.
    ```bash
    git add <specific files> && git commit -m "address review feedback (round <revision_round>) on PR #N"
    git push
@@ -221,18 +223,30 @@ Update state.json: set `last_trigger` to `ADDRESS: revise PR #N`, update `last_t
    gh label create "audit-batch-<N>" --force 2>/dev/null
    ```
 
-4. Fix each issue in the batch:
+4. Mark each issue as in-progress, then fix it:
+   ```bash
+   gh issue edit <number> --add-label "in-progress"
+   ```
    - Read the referenced file(s) — don't fix blind
    - Understand full context before changing anything
    - Apply minimal, targeted fixes
    - If the issue's suggested fix is sound, follow it; otherwise use judgment
-   - Run available test/lint commands if discoverable (Makefile, package.json, Cargo.toml, pyproject.toml, etc.)
 
-5. If tests fail after fixing:
+5. **Discover and run the project's linter/formatter** before committing:
+   - `Makefile` → check for targets: `lint`, `check`, `fmt`, `format`
+   - `package.json` → check `scripts` for: `lint`, `format`, `check`, `typecheck`
+   - `Cargo.toml` → run `cargo clippy` and `cargo fmt --check`
+   - `pyproject.toml` / `setup.cfg` → run `ruff check .` or `black --check .` or `flake8`
+   - `.golangci.yml` → run `golangci-lint run`
+   - Go files without golangci → run `go vet ./...`
+
+   If a linter reports auto-fixable errors, fix them before committing. If unfixable errors remain, note them in the PR body and add the `tests-failing` label after creating the PR.
+
+6. If tests fail after fixing:
    - Attempt to fix the test failure once
-   - If unable, label the PR `tests-failing` after creating it (step 7)
+   - If unable, label the PR `tests-failing` after creating it (step 8)
 
-6. Commit with issue references:
+7. **Stage and commit.** Never stage files that likely contain secrets (`.env`, `.env.*`, `credentials.json`, `*.pem`, `*.key`, `*.p12`, `*.pfx`, `id_rsa*`, `*.secret`). If any are among the changed files, exclude them and print a warning. Always use explicit file paths — never `git add -A` or `git add .`.
    ```bash
    git add <specific files>
    git commit -m "fix: <batch summary>
@@ -240,7 +254,7 @@ Update state.json: set `last_trigger` to `ADDRESS: revise PR #N`, update `last_t
    Closes #<issue1>, closes #<issue2>"
    ```
 
-7. Push and create PR:
+8. Push and create PR:
    ```bash
    git push -u origin audit/<short-slug>
    gh pr create \
@@ -263,9 +277,22 @@ Update state.json: set `last_trigger` to `ADDRESS: revise PR #N`, update `last_t
 
    If tests are failing, also add `--label "tests-failing"`.
 
-8. Update state.json: set `current_pr` to the new PR number, `current_batch` to batch number, `batches_created` to new count, `revision_round` to 0, `phase` to `codex-reviewing`, update `last_trigger_time`.
+   **If `gh pr create` fails because a PR already exists** for this branch (crash recovery scenario), retrieve the existing PR instead:
+   ```bash
+   existing=$(gh pr view --json number -q '.number' 2>/dev/null)
+   ```
+   Use that PR number. Do not attempt to create a duplicate.
 
-9. Notify Codex:
+9. Update issue labels — mark all issues in this batch as fix-submitted:
+   ```bash
+   for issue in <issue_numbers>; do
+     gh issue edit "$issue" --remove-label "in-progress" --add-label "fix-submitted"
+   done
+   ```
+
+10. Update state.json: set `current_pr` to the new PR number, `current_batch` to batch number, `batches_created` to new count, `revision_round` to 0, `phase` to `codex-reviewing`, update `last_trigger_time`.
+
+11. Notify Codex:
    ```bash
    tmux send-keys -t codex "AUDIT: review PR #<number>" Enter
    ```

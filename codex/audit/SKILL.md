@@ -90,7 +90,7 @@ Ensure labels exist (run once):
 ```bash
 for label in codex-audit severity:critical severity:high severity:medium severity:low \
   cat:security cat:correctness cat:performance cat:maintainability cat:dependency \
-  needs-human tests-failing; do
+  needs-human tests-failing in-progress fix-submitted fix-verified; do
   gh label create "$label" --force 2>/dev/null
 done
 ```
@@ -143,6 +143,14 @@ Update state.json: set `phase` to `codex-reviewing`, `current_pr` to N, update `
    ```bash
    gh pr review N --approve --body "Fixes verified."
    ```
+
+   Mark addressed issues as verified:
+   ```bash
+   for issue in $(gh pr view N --json body -q '.body' | grep -oiE 'closes?\s+#[0-9]+' | grep -oE '[0-9]+'); do
+     gh issue edit "$issue" --add-label "fix-verified"
+   done
+   ```
+
    Update state.json: set `phase` to `claude-fixing`, `revision_round` to 0, update `last_trigger_time`.
    ```bash
    tmux send-keys -t claude "ADDRESS: continue" Enter
