@@ -131,6 +131,9 @@ Update state.json: set `phase` to `claude-fixing`, update `last_trigger_time`.
 
 ```bash
 tmux send-keys -t claude "/address ADDRESS: begin"
+```
+Then in a **separate** bash call (do NOT chain with && or ;):
+```bash
 tmux send-keys -t claude Enter
 ```
 
@@ -196,6 +199,9 @@ Update state.json: set `phase` to `codex-reviewing`, `current_pr` to N, update `
    Update state.json: set `phase` to `claude-fixing`, `revision_round` to 0, update `last_trigger_time`.
    ```bash
    tmux send-keys -t claude "ADDRESS: continue"
+```
+Then in a **separate** bash call (do NOT chain with && or ;):
+```bash
 tmux send-keys -t claude Enter
    ```
 
@@ -218,6 +224,9 @@ tmux send-keys -t claude Enter
    Update state.json: set `phase` to `claude-fixing`, `revision_round` to 0, update `last_trigger_time`.
    ```bash
    tmux send-keys -t claude "ADDRESS: continue"
+```
+Then in a **separate** bash call (do NOT chain with && or ;):
+```bash
 tmux send-keys -t claude Enter
    ```
 
@@ -229,6 +238,9 @@ tmux send-keys -t claude Enter
    Update state.json: set `phase` to `claude-fixing`, `revision_round` to 0, update `last_trigger_time`.
    ```bash
    tmux send-keys -t claude "ADDRESS: continue"
+```
+Then in a **separate** bash call (do NOT chain with && or ;):
+```bash
 tmux send-keys -t claude Enter
    ```
 
@@ -254,6 +266,9 @@ tmux send-keys -t claude Enter
    Update state.json: set `phase` to `claude-fixing`, update `last_trigger_time`.
    ```bash
    tmux send-keys -t claude "ADDRESS: revise PR #N"
+```
+Then in a **separate** bash call (do NOT chain with && or ;):
+```bash
 tmux send-keys -t claude Enter
    ```
 
