@@ -194,7 +194,7 @@ Update state.json: set `phase` to `codex-reviewing`, `current_pr` to N, update `
 
    Update state.json: set `phase` to `claude-fixing`, `revision_round` to 0, update `last_trigger_time`.
    ```bash
-   tmux send-keys -t claude "/address ADDRESS: continue" Enter
+   tmux send-keys -t claude "ADDRESS: continue" Enter
    ```
 
    **If revisions are needed — request changes:**
@@ -215,7 +215,7 @@ Update state.json: set `phase` to `codex-reviewing`, `current_pr` to N, update `
    ```
    Update state.json: set `phase` to `claude-fixing`, `revision_round` to 0, update `last_trigger_time`.
    ```bash
-   tmux send-keys -t claude "/address ADDRESS: continue" Enter
+   tmux send-keys -t claude "ADDRESS: continue" Enter
    ```
 
    If `revision_round` >= 3 (cap reached):
@@ -225,7 +225,7 @@ Update state.json: set `phase` to `codex-reviewing`, `current_pr` to N, update `
    ```
    Update state.json: set `phase` to `claude-fixing`, `revision_round` to 0, update `last_trigger_time`.
    ```bash
-   tmux send-keys -t claude "/address ADDRESS: continue" Enter
+   tmux send-keys -t claude "ADDRESS: continue" Enter
    ```
 
    Otherwise, use the structured review template — no prose reviews:
@@ -249,7 +249,7 @@ Update state.json: set `phase` to `codex-reviewing`, `current_pr` to N, update `
 
    Update state.json: set `phase` to `claude-fixing`, update `last_trigger_time`.
    ```bash
-   tmux send-keys -t claude "/address ADDRESS: revise PR #N" Enter
+   tmux send-keys -t claude "ADDRESS: revise PR #N" Enter
    ```
 
 #### On "AUDIT: complete"
