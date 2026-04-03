@@ -24,6 +24,36 @@ Fix code issues identified by an external audit. Operates in two modes:
 
 Triggered by Codex via tmux send-keys. All GitHub operations use `gh` CLI.
 
+### Receive Protocol
+
+**On any input**, check whether it matches a known trigger phrase (`ADDRESS: begin`, `ADDRESS: continue`, `ADDRESS: revise PR #N`). If it does, handle it per the protocol below.
+
+**On session start or after any interruption**, check `.audit-loop/state.json`. If a cycle is in progress and `phase` is `claude-fixing`, resume:
+- If `current_pr` is set, check whether that PR has been reviewed. If not, re-send `AUDIT: review PR #N` to Codex. If it has reviews, process the latest review as if receiving the appropriate trigger.
+- If `current_pr` is null, treat it as `ADDRESS: begin` (start/continue grouping issues).
+
+**Important:** `needs-human` on one PR does NOT halt the cycle. The agent proceeds to the next batch. Only the capped PR is deferred.
+
+### State File
+
+All loop state lives in `.audit-loop/state.json` (in the repo root, created by Codex's `/audit` skill). This file is the source of truth for cycle progress, batch counts, and revision rounds.
+
+After every action, update `last_trigger_time` to the current ISO 8601 timestamp.
+
+### Timeout Check
+
+On receiving any trigger, read `last_trigger_time` from state.json. If more than 30 minutes have elapsed:
+
+```bash
+for pr in $(gh pr list --label codex-audit --state open --json number -q '.[].number'); do
+  gh pr edit "$pr" --add-label "needs-human"
+done
+```
+
+Print: "WARNING: {elapsed} since last activity. Other agent may be stalled. Labeled open PRs `needs-human` and stopping."
+
+Update state.json: set `phase` to `complete`. Do NOT send a tmux trigger (the other agent may be dead). Stop.
+
 ### Trigger phrases
 
 - `ADDRESS: begin` — Read all open `codex-audit` issues, plan batches, fix batch 1
@@ -32,36 +62,50 @@ Triggered by Codex via tmux send-keys. All GitHub operations use `gh` CLI.
 
 ### Constraints
 
-- **Max 5 PRs** per audit cycle
-- **Max 3 revision rounds** per PR
+- **Max 5 PRs** per audit cycle (tracked by `batches_created` in state.json)
+- **Max 3 revision rounds** per PR (tracked by `revision_round` in state.json)
 - **One PR at a time** — never have two audit PRs open simultaneously
 - Each PR gets its own branch off the default branch
 
 ### On "ADDRESS: begin"
+
+First run the timeout check.
+
+Update state.json: set `last_trigger` to `ADDRESS: begin`, update `last_trigger_time`.
 
 1. Identify the default branch:
    ```bash
    gh repo view --json defaultBranchRef -q '.defaultBranchRef.name'
    ```
 
-2. Fetch all open audit issues:
+2. **Deadlock recovery:** Before grouping new issues, check for open `codex-audit` PRs without reviews:
+   ```bash
+   gh pr list --label codex-audit --state open --json number,reviews \
+     --jq '.[] | select(.reviews | length == 0) | .number'
+   ```
+   If found, treat that PR as the current batch. Update state.json with `current_pr` and send:
+   ```bash
+   tmux send-keys -t codex "AUDIT: review PR #<number>" Enter
+   ```
+   Then wait. Do NOT create new batches.
+
+   Also check state.json: if `current_pr` is set and that PR is still open with no reviews, do the same.
+
+3. Fetch all open audit issues:
    ```bash
    gh issue list --label codex-audit --state open --json number,title,labels,body --limit 100
    ```
 
-3. If no issues found, signal completion immediately:
-   ```bash
-   tmux send-keys -t codex "AUDIT: complete" Enter
-   ```
+4. If no issues found, signal completion immediately (see "Signal completion" below).
 
-4. Group issues into batches by relatedness:
+5. Group issues into batches by relatedness:
    - Same file or subsystem/directory → same batch
    - Same category (e.g., all `cat:security` input validation) → same batch
    - Unrelated issues → separate batches
    - Order batches by severity (critical/high first)
    - Target 2-5 issues per batch. Single-issue batches are fine for complex fixes.
 
-5. Print the batch plan:
+6. Print the batch plan:
    ```
    ## Batch Plan
    Batch 1: #12, #13, #15 (auth input validation)
@@ -69,11 +113,22 @@ Triggered by Codex via tmux send-keys. All GitHub operations use `gh` CLI.
    Batch 3: #16 (deprecated dependency)
    ```
 
-6. Fix batch 1 (see "Fix a batch" below).
+7. Fix batch 1 (see "Fix a batch" below).
 
 ### On "ADDRESS: continue"
 
-1. Merge the current PR if one is open and approved:
+First run the timeout check.
+
+Update state.json: set `last_trigger` to `ADDRESS: continue`, `revision_round` to 0, update `last_trigger_time`.
+
+1. Merge the current PR if one is open and approved. **Refuse to merge PRs labeled `tests-failing`** — if the label is present, print a warning and skip the merge (label `needs-human` instead).
+
+   ```bash
+   # Check for tests-failing label
+   gh pr view <number> --json labels --jq '.labels[].name' | grep -q 'tests-failing'
+   ```
+
+   If no blocking label:
    ```bash
    gh pr merge <number> --squash --delete-branch
    ```
@@ -84,16 +139,12 @@ Triggered by Codex via tmux send-keys. All GitHub operations use `gh` CLI.
    ```
    Then retry merge. If still failing, label `needs-human` and move on.
 
-2. Close the issues fixed by this PR:
+2. Close the issues fixed by this PR (if using `Closes #N` in commit, they auto-close on merge — verify):
    ```bash
    gh issue close <number> --reason completed
    ```
 
-3. Check the batch cap — count how many `audit-batch-*` PRs have been created:
-   ```bash
-   gh pr list --label codex-audit --state all --json labels --limit 100
-   ```
-   If 5 batches created, signal completion.
+3. Check the batch cap — read `batches_created` from state.json. If >= 5, signal completion.
 
 4. Check for remaining open issues:
    ```bash
@@ -103,22 +154,23 @@ Triggered by Codex via tmux send-keys. All GitHub operations use `gh` CLI.
 
 ### On "ADDRESS: revise PR #N"
 
-1. Read review comments:
+First run the timeout check.
+
+Update state.json: set `last_trigger` to `ADDRESS: revise PR #N`, update `last_trigger_time`.
+
+1. Read `revision_round` from state.json. If >= 3, do NOT revise. Instead:
+   ```bash
+   gh pr edit N --add-label "needs-human"
+   ```
+   Print: "3 revision rounds reached. Labeled `needs-human`, waiting for next batch."
+   Update state.json: set `current_pr` to null, `revision_round` to 0.
+   Then wait for `ADDRESS: continue`.
+
+2. Read review comments:
    ```bash
    gh pr view N --json reviews --jq '.reviews[-1].body'
    gh api repos/{owner}/{repo}/pulls/N/comments --jq '.[] | select(.pull_request_review_id) | {path, body, line}'
    ```
-
-2. Check revision count:
-   ```bash
-   gh pr view N --json reviews --jq '[.reviews[] | select(.state=="CHANGES_REQUESTED")] | length'
-   ```
-   If >= 3, do NOT revise. Instead:
-   ```bash
-   gh pr edit N --add-label "needs-human"
-   ```
-   Print: "3 revision rounds reached. Labeled `needs-human`, waiting for Codex to advance."
-   Then wait for `ADDRESS: continue`.
 
 3. Check out the PR branch:
    ```bash
@@ -127,16 +179,36 @@ Triggered by Codex via tmux send-keys. All GitHub operations use `gh` CLI.
 
 4. Address each review comment with targeted fixes.
 
-5. Commit, push, notify Codex:
+5. If tests/lint are available, run them. If tests fail:
    ```bash
-   git add <specific files> && git commit -m "address review feedback on PR #N"
+   gh pr edit N --add-label "tests-failing"
+   ```
+   Note the failure in the PR body. Attempt to fix the test failure once. If unable to fix, proceed — Codex will see the label and request changes.
+
+   If tests pass and the PR previously had `tests-failing`:
+   ```bash
+   gh pr edit N --remove-label "tests-failing"
+   ```
+
+6. Update the revision marker in the PR body. Read current body, find or insert:
+   ```
+   <!-- audit-revision: N -->
+   ```
+   Update N to the current `revision_round` from state.json.
+
+7. Commit, push, notify Codex:
+   ```bash
+   git add <specific files> && git commit -m "address review feedback (round <revision_round>) on PR #N"
    git push
+   ```
+   Update state.json: set `phase` to `codex-reviewing`, update `last_trigger_time`.
+   ```bash
    tmux send-keys -t codex "AUDIT: review PR #N" Enter
    ```
 
 ### Fix a batch (subroutine)
 
-1. Determine batch number (count existing `audit-batch-*` labels + 1).
+1. Read `batches_created` from state.json, increment by 1. This is the batch number.
 
 2. Create a branch:
    ```bash
@@ -156,7 +228,11 @@ Triggered by Codex via tmux send-keys. All GitHub operations use `gh` CLI.
    - If the issue's suggested fix is sound, follow it; otherwise use judgment
    - Run available test/lint commands if discoverable (Makefile, package.json, Cargo.toml, pyproject.toml, etc.)
 
-5. Commit with issue references:
+5. If tests fail after fixing:
+   - Attempt to fix the test failure once
+   - If unable, label the PR `tests-failing` after creating it (step 7)
+
+6. Commit with issue references:
    ```bash
    git add <specific files>
    git commit -m "fix: <batch summary>
@@ -164,12 +240,14 @@ Triggered by Codex via tmux send-keys. All GitHub operations use `gh` CLI.
    Closes #<issue1>, closes #<issue2>"
    ```
 
-6. Push and create PR:
+7. Push and create PR:
    ```bash
    git push -u origin audit/<short-slug>
    gh pr create \
      --title "audit: <batch summary>" \
      --body "## Audit Fixes (Batch <N>)
+
+   <!-- audit-revision: 0 -->
 
    Addresses:
    - #<issue1>: <title>
@@ -183,12 +261,18 @@ Triggered by Codex via tmux send-keys. All GitHub operations use `gh` CLI.
      --label "codex-audit" --label "audit-batch-<N>"
    ```
 
-7. Notify Codex:
+   If tests are failing, also add `--label "tests-failing"`.
+
+8. Update state.json: set `current_pr` to the new PR number, `current_batch` to batch number, `batches_created` to new count, `revision_round` to 0, `phase` to `codex-reviewing`, update `last_trigger_time`.
+
+9. Notify Codex:
    ```bash
    tmux send-keys -t codex "AUDIT: review PR #<number>" Enter
    ```
 
 ### Signal completion
+
+Update state.json: set `phase` to `complete`, update `last_trigger_time`.
 
 ```bash
 tmux send-keys -t codex "AUDIT: complete" Enter
@@ -207,8 +291,8 @@ PRs needing human review: <N> (labeled needs-human)
 
 - If `tmux send-keys -t codex` fails: stop, tell the user to start Codex in a tmux session named `codex`.
 - If `gh` commands fail: retry once, then stop with error.
-- If merge conflicts can't be resolved: label `needs-human`, notify Codex with `AUDIT: complete`, move on.
-- If tests fail after fixing: one attempt to fix. If unable, note in PR body and proceed.
+- If merge conflicts can't be resolved: label `needs-human`, send `ADDRESS: continue` behavior (move to next batch).
+- If tests fail after fixing: label `tests-failing`, note in PR body, proceed with review request (Codex will catch it).
 
 ---
 
