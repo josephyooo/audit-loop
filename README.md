@@ -1,5 +1,7 @@
 # audit-loop
 
+> **Note**: This project was built entirely with [Claude Code](https://claude.ai/claude-code). Code, documentation, and commit messages were AI-generated with human direction and review.
+
 Agent-agnostic skills that orchestrate an automated audit-fix loop between any two AI coding agents via tmux, using GitHub issues and PRs as the shared state store.
 
 ## Skills
