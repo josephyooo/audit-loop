@@ -1,6 +1,6 @@
 ---
 name: address
-description: "Address external audit findings. Works in two modes: (1) manual — paste findings or point to a file, (2) loop — respond to audit agent triggers (ADDRESS: begin/continue/revise) to fix GitHub issues in batched PRs with automated review."
+description: Address external audit findings. Works in two modes — (1) manual: paste findings or point to a file, (2) loop: respond to audit agent triggers (ADDRESS: begin/continue/revise) to fix GitHub issues in batched PRs with automated review.
 argument-hint: "[filepath | ADDRESS: begin | ADDRESS: continue | ADDRESS: revise PR #N]"
 ---
 

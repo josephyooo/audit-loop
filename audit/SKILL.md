@@ -1,6 +1,6 @@
 ---
 name: audit
-description: "Audit the current repo, open GitHub issues for findings, then orchestrate the address agent to fix them in batched PRs via tmux. Reviews each PR the address agent opens and iterates until clean. Requires an address agent in a tmux session named 'address'."
+description: Audit the current repo, open GitHub issues for findings, then orchestrate the address agent to fix them in batched PRs via tmux. Reviews each PR the address agent opens and iterates until clean. Requires an address agent in a tmux session named "address".
 ---
 
 # Audit & Review Loop
