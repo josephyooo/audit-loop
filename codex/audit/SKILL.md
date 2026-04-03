@@ -184,10 +184,17 @@ Update state.json: set `phase` to `codex-reviewing`, `current_pr` to N, update `
 
 7. Decision:
 
-   **If the fixes are correct and tests pass — approve:**
+   **If the fixes are correct and tests pass — approve with a detailed comment** explaining what you verified. Don't just say "Fixes verified." — describe what you checked:
    ```bash
-   gh pr review N --approve --body "Fixes verified."
+   gh pr review N --approve --body "## Verification
+
+   - Issue #X: <what you verified — e.g., confirmed parameterized query prevents injection>
+   - Issue #Y: <what you verified>
+   - Checked for regressions: <what you tested>
+   - Docs: <note if docs were updated or didn't need updating>"
    ```
+
+   Also verify that any documentation affected by the changes (README, inline comments, config examples) was updated. If docs are stale, request changes for the doc update — not for the fix itself.
 
    Mark addressed issues as verified:
    ```bash

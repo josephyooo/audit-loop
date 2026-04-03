@@ -364,14 +364,17 @@ tmux send-keys -t codex Enter
    Closes #<issue1>, closes #<issue2>"
    ```
 
-8. **Self-review before pushing.** Run `git diff HEAD~1` and verify:
+8. **Update documentation.** If the fix changes behavior, configuration, or APIs, update the relevant docs (README, inline comments, config examples, usage instructions). Don't leave stale docs behind.
+
+9. **Self-review before pushing.** Run `git diff HEAD~1` and verify:
    - Each change addresses the root cause hypothesis, not just the symptom
    - No files were modified that aren't referenced in the batch's issues (exception: shared helpers for a systemic fix, up to the 3-file scope ceiling)
    - No debug output, commented-out code, or TODOs were introduced
+   - Documentation affected by the changes was updated
 
    If the diff contains out-of-scope changes, revert them with `git checkout HEAD~1 -- <file>` and amend the commit.
 
-9. Push and create PR:
+10. Push and create PR:
    ```bash
    git push -u origin audit/<short-slug>
    gh pr create \
@@ -383,6 +386,9 @@ tmux send-keys -t codex Enter
    Addresses:
    - #<issue1>: <title>
    - #<issue2>: <title>
+
+   ## Root Cause Analysis
+   <copy the hypotheses from .audit-loop/batch-N-hypotheses.md here — root cause, fix, risk for each issue>
 
    ## Changes
    <brief description of what was changed and why>
@@ -400,16 +406,16 @@ tmux send-keys -t codex Enter
    ```
    Use that PR number. Do not attempt to create a duplicate.
 
-10. Update issue labels — mark all issues in this batch as fix-submitted:
+11. Update issue labels — mark all issues in this batch as fix-submitted:
     ```bash
     for issue in <issue_numbers>; do
       gh issue edit "$issue" --remove-label "in-progress" --add-label "fix-submitted"
     done
     ```
 
-11. Update state.json: set `current_pr` to the new PR number, `current_batch` to batch number, `batches_created` to new count, `revision_round` to 0, `revision_history` to `[]`, `phase` to `codex-reviewing`, update `last_trigger_time`.
+12. Update state.json: set `current_pr` to the new PR number, `current_batch` to batch number, `batches_created` to new count, `revision_round` to 0, `revision_history` to `[]`, `phase` to `codex-reviewing`, update `last_trigger_time`.
 
-12. Notify Codex:
+13. Notify Codex:
    ```bash
    tmux send-keys -t codex "AUDIT: review PR #<number>"
 ```
