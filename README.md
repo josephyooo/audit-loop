@@ -13,18 +13,6 @@ Works with any agent that supports the Agent Skills standard (Claude Code, Codex
 
 ## Setup
 
-### Option A: rulesync (recommended)
-
-Symlink the skill directories into your project's `.rulesync/skills/`:
-```bash
-ln -s /path/to/audit-loop/address .rulesync/skills/address
-ln -s /path/to/audit-loop/audit .rulesync/skills/audit
-```
-
-Then `rulesync generate` distributes them to all configured agents.
-
-### Option B: manual symlinks
-
 Symlink into whichever agent skill directories you use:
 ```bash
 # Any agent that reads ~/.agents/skills/ (Codex CLI, Copilot CLI)
