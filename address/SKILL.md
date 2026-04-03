@@ -271,7 +271,24 @@ tmux send-keys -t audit Enter
    git push
    ```
 
-10. **Increment `revision_round`** in state.json (The address agent owns this counter — only increment when pushing an actual code change, not on clarification).
+10. **Post a revision summary comment on the PR** so the audit agent (and humans) can see the reasoning:
+    ```bash
+    gh pr comment N --body "$(cat <<'REVEOF'
+    ## Revision Round <revision_round>
+
+    ### Analysis
+    <copy the parsed review tasks from step 4 here — File, Requested change, My plan for each>
+
+    ### Changes
+    <brief description of what was changed and why>
+
+    ### Test plan
+    <how to verify the revision fixes the review feedback>
+    REVEOF
+    )"
+    ```
+
+11. **Increment `revision_round`** in state.json (The address agent owns this counter — only increment when pushing an actual code change, not on clarification).
 
     Write a `revision_history` entry:
     ```json
