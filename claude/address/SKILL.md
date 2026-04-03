@@ -105,7 +105,8 @@ Update state.json: set `last_trigger` to `ADDRESS: begin`, update `last_trigger_
    ```
    If found, treat that PR as the current batch. Update state.json with `current_pr` and send:
    ```bash
-   tmux send-keys -t codex "AUDIT: review PR #<number>" Enter
+   tmux send-keys -t codex "AUDIT: review PR #<number>"
+tmux send-keys -t codex Enter
    ```
    Then wait. Do NOT create new batches.
 
@@ -224,7 +225,8 @@ Update state.json: set `last_trigger` to `ADDRESS: revise PR #N`, update `last_t
    ```
    Set `awaiting_clarification` to `true` in state.json (keep `phase` as `codex-reviewing`). Do not make any code changes. Still send the review trigger so Codex can answer:
    ```bash
-   tmux send-keys -t codex "AUDIT: review PR #N" Enter
+   tmux send-keys -t codex "AUDIT: review PR #N"
+tmux send-keys -t codex Enter
    ```
    Then stop and wait.
 
@@ -272,7 +274,8 @@ Update state.json: set `last_trigger` to `ADDRESS: revise PR #N`, update `last_t
 
     Update state.json: set `phase` to `codex-reviewing`, update `last_trigger_time`.
     ```bash
-    tmux send-keys -t codex "AUDIT: review PR #N" Enter
+    tmux send-keys -t codex "AUDIT: review PR #N"
+tmux send-keys -t codex Enter
     ```
 
 ### Fix a batch (subroutine)
@@ -399,7 +402,8 @@ Update state.json: set `last_trigger` to `ADDRESS: revise PR #N`, update `last_t
 
 12. Notify Codex:
    ```bash
-   tmux send-keys -t codex "AUDIT: review PR #<number>" Enter
+   tmux send-keys -t codex "AUDIT: review PR #<number>"
+tmux send-keys -t codex Enter
    ```
 
 ### Signal completion
@@ -407,7 +411,8 @@ Update state.json: set `last_trigger` to `ADDRESS: revise PR #N`, update `last_t
 Update state.json: set `phase` to `complete`, update `last_trigger_time`.
 
 ```bash
-tmux send-keys -t codex "AUDIT: complete" Enter
+tmux send-keys -t codex "AUDIT: complete"
+tmux send-keys -t codex Enter
 ```
 
 Print:
