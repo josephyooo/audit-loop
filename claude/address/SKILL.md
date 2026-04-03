@@ -40,9 +40,29 @@ All loop state lives in `.audit-loop/state.json` (in the repo root, created by C
 
 After every action, update `last_trigger_time` to the current ISO 8601 timestamp.
 
+### Additional State Fields
+
+Beyond the base fields (`cycle_id`, `phase`, `current_pr`, `current_batch`, `revision_round`, `batches_created`, `last_trigger`, `last_trigger_time`), state.json also tracks:
+
+- `awaiting_clarification`: boolean — `true` when Claude posted a clarifying question and is blocked waiting for a response. Default `false`.
+- `revision_history`: array of `{round, pr, commit, summary}` entries — Claude writes one after each revision push. The `commit` SHA enables Codex's convergence detection.
+
+Both skills read and write state.json. Always read-modify-write (don't overwrite the whole file).
+
 ### Timeout Check
 
-On receiving any trigger, read `last_trigger_time` from state.json. If more than 30 minutes have elapsed:
+On receiving any trigger, read `last_trigger_time` and `awaiting_clarification` from state.json.
+
+**If `awaiting_clarification` is true:**
+- If `last_trigger_time` < 2 hours ago: skip normal timeout. Print: "Cycle is blocked on clarification — waiting for response on PR #N."
+- If `last_trigger_time` >= 2 hours ago: clarification was never answered.
+  ```bash
+  gh pr edit <current_pr> --add-label "needs-human"
+  gh pr comment <current_pr> --body "Clarification not answered within 2 hours. Deferring to human review."
+  ```
+  Set `awaiting_clarification` to `false`, `current_pr` to null. Move on to the next batch.
+
+**If `awaiting_clarification` is false** and more than 30 minutes have elapsed:
 
 ```bash
 for pr in $(gh pr list --label codex-audit --state open --json number -q '.[].number'); do
@@ -91,7 +111,19 @@ Update state.json: set `last_trigger` to `ADDRESS: begin`, update `last_trigger_
 
    Also check state.json: if `current_pr` is set and that PR is still open with no reviews, do the same.
 
-3. Fetch all open audit issues:
+3. **Check for orphaned in-progress issues** from an interrupted batch:
+   ```bash
+   gh issue list --label in-progress --label codex-audit --state open --json number,title
+   ```
+   If found, check whether their audit branch exists:
+   ```bash
+   git ls-remote --heads origin | grep 'refs/heads/audit/'
+   ```
+   - If a branch exists with a PR: resume by sending the review trigger for the existing PR.
+   - If a branch exists with commits but no PR: delete the orphaned branch (`git push origin --delete audit/<slug>`), remove `in-progress` labels, and include those issues in new batching.
+   - If no branch exists: just remove `in-progress` labels and regroup normally.
+
+4. Fetch all open audit issues:
    ```bash
    gh issue list --label codex-audit --state open --json number,title,labels,body --limit 100
    ```
@@ -177,11 +209,38 @@ Update state.json: set `last_trigger` to `ADDRESS: revise PR #N`, update `last_t
    gh pr checkout N
    ```
 
-4. Address each review comment with targeted fixes.
+4. **Parse review comments into explicit tasks before editing.**
 
-5. **Discover and run the project's linter/formatter** (same discovery as "Fix a batch" step 5). Fix auto-fixable errors before committing.
+   For each review comment, write:
+   ```
+   File: <path:line>
+   Requested change: <one sentence, in your own words>
+   My plan: <what you'll do>
+   ```
 
-6. If tests/lint fail:
+   If you cannot confidently interpret a comment (ambiguous feedback), do NOT guess. Post a clarifying comment on the PR:
+   ```bash
+   gh pr comment N --body "Clarification needed: [quote the ambiguous feedback]. Do you mean [interpretation A] or [interpretation B]?"
+   ```
+   Set `awaiting_clarification` to `true` in state.json (keep `phase` as `codex-reviewing`). Do not make any code changes. Still send the review trigger so Codex can answer:
+   ```bash
+   tmux send-keys -t codex "AUDIT: review PR #N" Enter
+   ```
+   Then stop and wait.
+
+   **Resuming from clarification:** On any input while `awaiting_clarification` is true, check the PR for new comments after yours:
+   ```bash
+   gh pr view N --json comments --jq '.comments[-1].body'
+   ```
+   If a response exists, set `awaiting_clarification` to `false` and proceed with the revision using the clarified feedback.
+
+   **Scope constraint:** Only modify files and lines cited in the review comments. If you notice an unrelated issue during revision, file a new GitHub issue — do not fix it in this PR.
+
+5. Address each parsed review task with targeted fixes.
+
+6. **Discover and run the project's linter/formatter** (same discovery as "Fix a batch" step 5). Fix auto-fixable errors before committing.
+
+7. If tests/lint fail:
    ```bash
    gh pr edit N --add-label "tests-failing"
    ```
@@ -192,21 +251,29 @@ Update state.json: set `last_trigger` to `ADDRESS: revise PR #N`, update `last_t
    gh pr edit N --remove-label "tests-failing"
    ```
 
-7. Update the revision marker in the PR body. Read current body, find or insert:
+8. Update the revision marker in the PR body. Read current body, find or insert:
    ```
    <!-- audit-revision: N -->
    ```
    Update N to the current `revision_round` from state.json.
 
-8. **Stage and commit.** Apply the same secret file exclusion as "Fix a batch" step 7 — never stage `.env`, credentials, keys, etc. Use explicit file paths.
+9. **Stage and commit.** Apply the same secret file exclusion as "Fix a batch" step 7 — never stage `.env`, credentials, keys, etc. Use explicit file paths.
    ```bash
    git add <specific files> && git commit -m "address review feedback (round <revision_round>) on PR #N"
    git push
    ```
-   Update state.json: set `phase` to `codex-reviewing`, update `last_trigger_time`.
-   ```bash
-   tmux send-keys -t codex "AUDIT: review PR #N" Enter
-   ```
+
+10. **Increment `revision_round`** in state.json (Claude owns this counter — only increment when pushing an actual code change, not on clarification).
+
+    Write a `revision_history` entry:
+    ```json
+    { "round": <revision_round>, "pr": N, "commit": "<git rev-parse HEAD>", "summary": "<one-line description>" }
+    ```
+
+    Update state.json: set `phase` to `codex-reviewing`, update `last_trigger_time`.
+    ```bash
+    tmux send-keys -t codex "AUDIT: review PR #N" Enter
+    ```
 
 ### Fix a batch (subroutine)
 
@@ -223,7 +290,7 @@ Update state.json: set `last_trigger` to `ADDRESS: revise PR #N`, update `last_t
    gh label create "audit-batch-<N>" --force 2>/dev/null
    ```
 
-4. **Research history, then fix each issue:**
+4. **Research history and write hypotheses before fixing:**
 
    Mark each issue as in-progress:
    ```bash
@@ -237,9 +304,25 @@ Update state.json: set `last_trigger` to `ADDRESS: revise PR #N`, update `last_t
    ```
    where `{keyword}` is a distinguishing term from the issue (e.g., "injection", "race condition", "null check").
 
+   **4a. Hypothesis before fix (mandatory).** For each issue in the batch, write a one-sentence hypothesis before editing any file:
+
+   ```
+   Root cause: <what invariant is violated and why>
+   Fix: <what will change at which file:line and what behavior it produces>
+   Risk: <what could break>
+   ```
+
+   Write all hypotheses to `.audit-loop/batch-<N>-hypotheses.md`. Do not edit any source files until hypotheses are written for all issues in the batch.
+
+   If you cannot write a confident hypothesis after reading the file and issue body, add a comment to the GitHub issue asking for clarification, remove the `in-progress` label, and skip this issue (move it to the next batch).
+
+   **4b. Fix each issue:**
+
    If the issue is a **reopened recurrence** (Codex added a "recurrence detected" comment), the previous fix was insufficient. Identify the root cause and apply a systemic fix (validation middleware, shared helper, lint rule, regression test) rather than patching the same symptom again. Note the prior fix commit in the PR body.
 
    When **multiple issues in the batch share a root cause** (e.g., 3 unsanitized inputs in different handlers), prefer a single systemic fix over N individual patches. For example: add input validation middleware instead of sanitizing each handler separately.
+
+   **Scope ceiling:** A systemic fix may touch at most 3 files not directly referenced in the batch's issues. If fixing the root cause properly requires more, open a separate issue titled "Systemic: <root cause>" with your proposed fix plan, label it `codex-audit` + `severity:high` + the matching `cat:` label, and apply a scoped partial fix to the immediate symptoms instead.
 
    For each issue:
    - Read the referenced file(s) — don't fix blind
@@ -269,7 +352,14 @@ Update state.json: set `last_trigger` to `ADDRESS: revise PR #N`, update `last_t
    Closes #<issue1>, closes #<issue2>"
    ```
 
-8. Push and create PR:
+8. **Self-review before pushing.** Run `git diff HEAD~1` and verify:
+   - Each change addresses the root cause hypothesis, not just the symptom
+   - No files were modified that aren't referenced in the batch's issues (exception: shared helpers for a systemic fix, up to the 3-file scope ceiling)
+   - No debug output, commented-out code, or TODOs were introduced
+
+   If the diff contains out-of-scope changes, revert them with `git checkout HEAD~1 -- <file>` and amend the commit.
+
+9. Push and create PR:
    ```bash
    git push -u origin audit/<short-slug>
    gh pr create \
@@ -298,16 +388,16 @@ Update state.json: set `last_trigger` to `ADDRESS: revise PR #N`, update `last_t
    ```
    Use that PR number. Do not attempt to create a duplicate.
 
-9. Update issue labels — mark all issues in this batch as fix-submitted:
-   ```bash
-   for issue in <issue_numbers>; do
-     gh issue edit "$issue" --remove-label "in-progress" --add-label "fix-submitted"
-   done
-   ```
+10. Update issue labels — mark all issues in this batch as fix-submitted:
+    ```bash
+    for issue in <issue_numbers>; do
+      gh issue edit "$issue" --remove-label "in-progress" --add-label "fix-submitted"
+    done
+    ```
 
-10. Update state.json: set `current_pr` to the new PR number, `current_batch` to batch number, `batches_created` to new count, `revision_round` to 0, `phase` to `codex-reviewing`, update `last_trigger_time`.
+11. Update state.json: set `current_pr` to the new PR number, `current_batch` to batch number, `batches_created` to new count, `revision_round` to 0, `revision_history` to `[]`, `phase` to `codex-reviewing`, update `last_trigger_time`.
 
-11. Notify Codex:
+12. Notify Codex:
    ```bash
    tmux send-keys -t codex "AUDIT: review PR #<number>" Enter
    ```

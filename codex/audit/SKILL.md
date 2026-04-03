@@ -145,19 +145,40 @@ When a message arrives, first run the timeout check (see above). Then act based 
 
 Update state.json: set `phase` to `codex-reviewing`, `current_pr` to N, update `last_trigger_time`.
 
-1. Read the PR:
+1. **Check for clarification requests** from Claude before reviewing:
+   ```bash
+   gh pr view N --json comments --jq '.comments[] | select(.body | startswith("Clarification needed:")) | .body'
+   ```
+   If a clarification comment exists without a follow-up response, answer it directly based on your original review intent:
+   ```bash
+   gh pr comment N --body "<answer the clarification>"
+   ```
+   Then, **in this order** (Claude reads state.json immediately on trigger):
+   1. Set `awaiting_clarification` to `false` in state.json
+   2. Send `ADDRESS: revise PR #N` via tmux
+
+   Do not proceed with the diff review — Claude will revise first.
+
+2. Read the PR:
    ```bash
    gh pr view N
    gh pr diff N
    ```
 
-2. For each issue the PR claims to address, verify the fix is correct and complete.
+3. For each issue the PR claims to address, verify the fix is correct and complete.
 
-3. Check for regressions or new issues introduced by the changes.
+4. Check for regressions or new issues introduced by the changes.
 
-4. **Check for `tests-failing` label.** If the PR has this label, do NOT approve — request changes explaining the test failure must be resolved first.
+5. **Check for `tests-failing` label.** If the PR has this label, do NOT approve — request changes explaining the test failure must be resolved first.
 
-5. Decision:
+6. **Review principle:** If the fix correctly addresses the issue and introduces no regressions, APPROVE — even if you would have implemented it differently. Request changes only when:
+   - The fix is logically incorrect
+   - The fix is incomplete (the issue can still be reproduced)
+   - The fix introduces a regression
+
+   Do NOT request changes for: variable naming, code style, comment wording, formatting, or implementation approach differences where both approaches are correct. Those are the linter's job.
+
+7. Decision:
 
    **If the fixes are correct and tests pass — approve:**
    ```bash
@@ -177,9 +198,27 @@ Update state.json: set `phase` to `codex-reviewing`, `current_pr` to N, update `
    ```
 
    **If revisions are needed — request changes:**
-   Read `revision_round` from state.json. Increment it by 1 and write it back.
 
-   If `revision_round` >= 3:
+   Read `revision_round` from state.json. Do NOT increment it — Claude owns that counter and increments on push.
+
+   **Convergence check (after 2nd revision, before requesting the 3rd):** If `revision_round` >= 2, check for convergence before requesting another round. Read `revision_history` from state.json and get the previous revision's commit SHA. Compare:
+   ```bash
+   base=$(gh pr view N --json commits --jq '.commits[0].oid')
+   prev_commit=<from revision_history[-1].commit>
+   curr_diff=$(git diff $prev_commit..HEAD | wc -l)
+   prev_diff=$(git diff $base..$prev_commit | wc -l)
+   ```
+   If `curr_diff` < 30% of `prev_diff`, the revisions are cancelling each other out. Do NOT request another revision:
+   ```bash
+   gh pr review N --comment --body "Revisions are not converging — same lines toggling across revisions. Escalating to human review."
+   gh pr edit N --add-label "needs-human"
+   ```
+   Update state.json: set `phase` to `claude-fixing`, `revision_round` to 0, update `last_trigger_time`.
+   ```bash
+   tmux send-keys -t claude "ADDRESS: continue" Enter
+   ```
+
+   If `revision_round` >= 3 (cap reached):
    ```bash
    gh pr review N --comment --body "3 revision rounds reached. Deferring remaining concerns to human review."
    gh pr edit N --add-label "needs-human"
@@ -189,10 +228,25 @@ Update state.json: set `phase` to `codex-reviewing`, `current_pr` to N, update `
    tmux send-keys -t claude "ADDRESS: continue" Enter
    ```
 
-   Otherwise:
+   Otherwise, use the structured review template — no prose reviews:
    ```bash
-   gh pr review N --request-changes --body "<specific feedback per file/issue>"
+   gh pr review N --request-changes --body "$(cat <<'REVIEWEOF'
+   ## Changes Requested
+
+   ### [WRONG|INCOMPLETE|REGRESSION] Issue #<num>: <one-line summary>
+   **File**: `path/to/file:line_range`
+   **Current behavior**: <what the code does now>
+   **Required behavior**: <what it must do>
+   **Specific change**: <what line/function/pattern needs to change>
+   REVIEWEOF
+   )"
    ```
+
+   The classifier tells Claude *how* to fix:
+   - `WRONG` — logic error, revert and re-approach
+   - `INCOMPLETE` — fix is correct but doesn't cover all cases
+   - `REGRESSION` — fix breaks something that was working
+
    Update state.json: set `phase` to `claude-fixing`, update `last_trigger_time`.
    ```bash
    tmux send-keys -t claude "ADDRESS: revise PR #N" Enter
