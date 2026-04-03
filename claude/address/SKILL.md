@@ -223,14 +223,29 @@ Update state.json: set `last_trigger` to `ADDRESS: revise PR #N`, update `last_t
    gh label create "audit-batch-<N>" --force 2>/dev/null
    ```
 
-4. Mark each issue as in-progress, then fix it:
+4. **Research history, then fix each issue:**
+
+   Mark each issue as in-progress:
    ```bash
    gh issue edit <number> --add-label "in-progress"
    ```
+
+   Before fixing, check whether the same file/area has had related fixes:
+   ```bash
+   git log --oneline --all -20 -- {filepath}
+   git log --oneline --all --grep="{keyword}" -10
+   ```
+   where `{keyword}` is a distinguishing term from the issue (e.g., "injection", "race condition", "null check").
+
+   If the issue is a **reopened recurrence** (Codex added a "recurrence detected" comment), the previous fix was insufficient. Identify the root cause and apply a systemic fix (validation middleware, shared helper, lint rule, regression test) rather than patching the same symptom again. Note the prior fix commit in the PR body.
+
+   When **multiple issues in the batch share a root cause** (e.g., 3 unsanitized inputs in different handlers), prefer a single systemic fix over N individual patches. For example: add input validation middleware instead of sanitizing each handler separately.
+
+   For each issue:
    - Read the referenced file(s) — don't fix blind
    - Understand full context before changing anything
-   - Apply minimal, targeted fixes
-   - If the issue's suggested fix is sound, follow it; otherwise use judgment
+   - Apply targeted fixes — systemic when the issue recurs, minimal when it's new
+   - If the issue's suggested fix is sound, follow it; if it's a band-aid for a recurring problem, go deeper
 
 5. **Discover and run the project's linter/formatter** before committing:
    - `Makefile` → check for targets: `lint`, `check`, `fmt`, `format`
@@ -402,10 +417,11 @@ If the user indicated blanket approval, proceed without waiting.
 ### Step 4: Fix
 
 1. Read relevant file(s) for full context
-2. Apply minimal, targeted fixes via Edit
-3. Follow audit suggestion if sound; otherwise use judgment and note divergence
-4. For recurring/regressions, note systemic cause in report (don't over-engineer prevention unless asked)
-5. Run test/lint commands if discoverable
+2. For **recurring or regression** findings, identify the root cause — apply a systemic fix (shared helper, middleware, lint rule, regression test) rather than patching the same symptom. Note the prior fix commit in the report.
+3. When **multiple findings share a root cause**, prefer a single systemic fix over N individual patches
+4. For new, isolated findings, apply minimal, targeted fixes via Edit
+5. Follow audit suggestion if sound; otherwise use judgment and note divergence
+6. Run test/lint commands if discoverable
 
 ### Step 5: Report
 

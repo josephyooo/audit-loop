@@ -95,7 +95,25 @@ for label in codex-audit severity:critical severity:high severity:medium severit
 done
 ```
 
-For each finding, create an issue:
+**Before filing each issue, check for duplicates** among previously closed `codex-audit` issues:
+
+```bash
+gh issue list --label codex-audit --state closed --json number,title,body,labels --limit 200
+```
+
+For each finding, search the closed issues for matches on the same file path and category. If a match is found:
+- **Reopen the original issue** instead of filing a new one:
+  ```bash
+  gh issue reopen <number>
+  gh issue comment <number> --body "Recurrence detected. This issue was previously fixed but has reappeared. Escalating severity — a deeper/systemic fix is needed."
+  ```
+- **Escalate severity** by one level (low→medium, medium→high, high→critical):
+  ```bash
+  gh issue edit <number> --remove-label "severity:<old>" --add-label "severity:<new>"
+  ```
+- Remove any stale state labels (`fix-submitted`, `fix-verified`) from the reopened issue.
+
+If no duplicate is found, create a new issue:
 
 ```bash
 gh issue create --title "<concise title>" \
@@ -104,6 +122,8 @@ gh issue create --title "<concise title>" \
 ```
 
 Include enough detail that a fixer can work without re-auditing. Order by severity (critical first).
+
+**Pattern detection:** After filing all issues, review them as a group. If 3+ issues share a root cause (e.g., multiple unsanitized inputs, repeated missing null checks in the same subsystem), add a comment to one of them noting the pattern and suggesting a systemic fix rather than N individual patches.
 
 ### Step 4: Trigger Claude
 
