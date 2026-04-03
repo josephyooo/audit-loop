@@ -1,56 +1,72 @@
 # audit-loop
 
-A pair of skills that orchestrate an automated audit-fix loop between OpenAI Codex and Claude Code via tmux, using GitHub issues and PRs as the shared state store.
+Agent-agnostic skills that orchestrate an automated audit-fix loop between any two AI coding agents via tmux, using GitHub issues and PRs as the shared state store.
 
 ## Skills
 
-| Skill | Agent | Location | Purpose |
+| Skill | Role | Location | Purpose |
 |---|---|---|---|
-| `/audit` | Codex | `codex/audit/SKILL.md` | Audit the repo, open issues, review Claude's PRs |
-| `/address` | Claude Code | `claude/address/SKILL.md` | Fix issues in batched PRs, handle review feedback |
+| `/audit` | Auditor | `audit/SKILL.md` | Audit the repo, open issues, review the address agent's PRs |
+| `/address` | Fixer | `address/SKILL.md` | Fix issues in batched PRs, handle review feedback |
+
+Works with any agent that supports the Agent Skills standard (Claude Code, Codex CLI, Copilot CLI, Gemini CLI, etc.).
 
 ## Setup
 
-1. Symlink the skills into the agent skill directories:
-   ```bash
-   # Claude Code
-   ln -s /path/to/audit-loop/claude/address ~/.claude/skills/address
+### Option A: rulesync (recommended)
 
-   # Codex
-   ln -s /path/to/audit-loop/codex/audit ~/.agents/skills/audit
-   ```
+Symlink the skill directories into your project's `.rulesync/skills/`:
+```bash
+ln -s /path/to/audit-loop/address .rulesync/skills/address
+ln -s /path/to/audit-loop/audit .rulesync/skills/audit
+```
 
-2. Start named tmux sessions:
-   ```bash
-   tmux new -s codex
-   tmux new -s claude
-   ```
+Then `rulesync generate` distributes them to all configured agents.
 
-3. In both sessions, `cd` to the target repo.
+### Option B: manual symlinks
 
-4. Start Codex in the `codex` session, Claude Code in the `claude` session.
+Symlink into whichever agent skill directories you use:
+```bash
+# Any agent that reads ~/.agents/skills/ (Codex CLI, Copilot CLI)
+ln -s /path/to/audit-loop/audit ~/.agents/skills/audit
+ln -s /path/to/audit-loop/address ~/.agents/skills/address
 
-5. Ensure `gh` CLI is authenticated with repo access.
+# Claude Code specifically
+ln -s /path/to/audit-loop/address ~/.claude/skills/address
+ln -s /path/to/audit-loop/audit ~/.claude/skills/audit
+```
+
+### tmux sessions
+
+Start two named tmux sessions — names must be `audit` and `address`:
+```bash
+tmux new -s audit
+tmux new -s address
+```
+
+In both sessions, `cd` to the target repo and start your chosen agent.
+
+Ensure `gh` CLI is authenticated with repo access.
 
 ## Usage
 
-In the Codex session, run `/audit`. Everything else is automatic.
+In the `audit` session, run `/audit`. Everything else is automatic.
 
 ### What happens
 
-1. Codex audits the repo and opens GitHub issues (labeled `codex-audit` + severity + category)
-2. Codex sends `/address ADDRESS: begin` to Claude via tmux
-3. Claude groups related issues into batches, writes root cause hypotheses, fixes batch 1, opens a PR
-4. Claude sends `AUDIT: review PR #N` to Codex
-5. Codex reviews the PR:
-   - **Approve** -> Claude merges and starts the next batch
-   - **Request changes** (structured `WRONG|INCOMPLETE|REGRESSION` feedback) -> Claude revises
+1. The audit agent audits the repo and opens GitHub issues (labeled `codex-audit` + severity + category)
+2. The audit agent sends `/address ADDRESS: begin` to the address agent via tmux
+3. The address agent groups related issues into batches, writes root cause hypotheses, fixes batch 1, opens a PR
+4. The address agent sends `AUDIT: review PR #N` to the audit agent
+5. The audit agent reviews the PR:
+   - **Approve** -> address agent merges and starts the next batch
+   - **Request changes** (structured `WRONG|INCOMPLETE|REGRESSION` feedback) -> address agent revises
 6. Repeat until all issues are addressed or safety caps are hit
-7. Codex does a final sweep and prints a summary
+7. The audit agent does a final sweep and prints a summary
 
 ### Manual mode
 
-`/address` also works standalone (without the Codex loop). Paste findings inline or provide a file path:
+`/address` also works standalone (without the audit loop). Paste findings inline or provide a file path:
 ```
 /address path/to/findings.md
 /address  (then paste findings)
@@ -58,14 +74,14 @@ In the Codex session, run `/audit`. Everything else is automatic.
 
 ## Trigger Protocol
 
-Codex -> Claude (telling Claude to address):
+Audit -> Address (telling the address agent to fix):
 ```
 /address ADDRESS: begin      # first trigger, loads the skill
 ADDRESS: continue             # PR approved, merge and do next batch
 ADDRESS: revise PR #N         # changes requested, revise
 ```
 
-Claude -> Codex (telling Codex to review):
+Address -> Audit (telling the audit agent to review):
 ```
 AUDIT: review PR #N           # PR ready for review
 AUDIT: complete                # all batches done

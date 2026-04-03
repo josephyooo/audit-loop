@@ -1,6 +1,6 @@
 ---
 name: address
-description: Address external audit findings. Works in two modes — (1) manual: paste findings or point to a file, (2) loop: respond to Codex triggers (ADDRESS: begin/continue/revise) to fix GitHub issues in batched PRs with automated review.
+description: Address external audit findings. Works in two modes — (1) manual: paste findings or point to a file, (2) loop: respond to audit agent triggers (ADDRESS: begin/continue/revise) to fix GitHub issues in batched PRs with automated review.
 argument-hint: "[filepath | ADDRESS: begin | ADDRESS: continue | ADDRESS: revise PR #N]"
 ---
 
@@ -9,7 +9,7 @@ argument-hint: "[filepath | ADDRESS: begin | ADDRESS: continue | ADDRESS: revise
 Fix code issues identified by an external audit. Operates in two modes:
 
 - **Manual mode**: user pastes findings or provides a file path. Parse, triage, fix, report.
-- **Loop mode**: activated by `ADDRESS:` trigger phrases from Codex via tmux. Reads GitHub issues, fixes in batched PRs, coordinates review with Codex.
+- **Loop mode**: activated by `ADDRESS:` trigger phrases from the audit agent via tmux. Reads GitHub issues, fixes in batched PRs, coordinates review with the audit agent.
 
 ---
 
@@ -22,21 +22,21 @@ Fix code issues identified by an external audit. Operates in two modes:
 
 ## Loop Protocol
 
-Triggered by Codex via tmux send-keys. All GitHub operations use `gh` CLI.
+Triggered by the audit agent via tmux send-keys. All GitHub operations use `gh` CLI.
 
 ### Receive Protocol
 
 **On any input**, check whether it matches a known trigger phrase (`ADDRESS: begin`, `ADDRESS: continue`, `ADDRESS: revise PR #N`). If it does, handle it per the protocol below.
 
-**On session start or after any interruption**, check `.audit-loop/state.json`. If a cycle is in progress and `phase` is `claude-fixing`, resume:
-- If `current_pr` is set, check whether that PR has been reviewed. If not, re-send `AUDIT: review PR #N` to Codex. If it has reviews, process the latest review as if receiving the appropriate trigger.
+**On session start or after any interruption**, check `.audit-loop/state.json`. If a cycle is in progress and `phase` is `address-fixing`, resume:
+- If `current_pr` is set, check whether that PR has been reviewed. If not, re-send `AUDIT: review PR #N` to the audit agent. If it has reviews, process the latest review as if receiving the appropriate trigger.
 - If `current_pr` is null, treat it as `ADDRESS: begin` (start/continue grouping issues).
 
 **Important:** `needs-human` on one PR does NOT halt the cycle. The agent proceeds to the next batch. Only the capped PR is deferred.
 
 ### State File
 
-All loop state lives in `.audit-loop/state.json` (in the repo root, created by Codex's `/audit` skill). This file is the source of truth for cycle progress, batch counts, and revision rounds.
+All loop state lives in `.audit-loop/state.json` (in the repo root, created by the `/audit` skill). This file is the source of truth for cycle progress, batch counts, and revision rounds.
 
 After every action, update `last_trigger_time` to the current ISO 8601 timestamp.
 
@@ -44,8 +44,8 @@ After every action, update `last_trigger_time` to the current ISO 8601 timestamp
 
 Beyond the base fields (`cycle_id`, `phase`, `current_pr`, `current_batch`, `revision_round`, `batches_created`, `last_trigger`, `last_trigger_time`), state.json also tracks:
 
-- `awaiting_clarification`: boolean — `true` when Claude posted a clarifying question and is blocked waiting for a response. Default `false`.
-- `revision_history`: array of `{round, pr, commit, summary}` entries — Claude writes one after each revision push. The `commit` SHA enables Codex's convergence detection.
+- `awaiting_clarification`: boolean — `true` when the address agent posted a clarifying question and is blocked waiting for a response. Default `false`.
+- `revision_history`: array of `{round, pr, commit, summary}` entries — The address agent writes one after each revision push. The `commit` SHA enables the audit agent's convergence detection.
 
 Both skills read and write state.json. Always read-modify-write (don't overwrite the whole file).
 
@@ -78,7 +78,7 @@ Update state.json: set `phase` to `complete`. Do NOT send a tmux trigger (the ot
 
 - `ADDRESS: begin` — Read all open `codex-audit` issues, plan batches, fix batch 1
 - `ADDRESS: continue` — Current PR was approved (or escalated). Merge it, move to next batch.
-- `ADDRESS: revise PR #N` — Codex requested changes. Read review comments and revise.
+- `ADDRESS: revise PR #N` — Audit agent requested changes. Read review comments and revise.
 
 ### Constraints
 
@@ -105,11 +105,11 @@ Update state.json: set `last_trigger` to `ADDRESS: begin`, update `last_trigger_
    ```
    If found, treat that PR as the current batch. Update state.json with `current_pr` and send:
    ```bash
-   tmux send-keys -t codex "AUDIT: review PR #<number>"
+   tmux send-keys -t audit "AUDIT: review PR #<number>"
 ```
 Then in a **separate** bash call (do NOT chain with && or ;):
 ```bash
-tmux send-keys -t codex Enter
+tmux send-keys -t audit Enter
    ```
    Then wait. Do NOT create new batches.
 
@@ -226,13 +226,13 @@ Update state.json: set `last_trigger` to `ADDRESS: revise PR #N`, update `last_t
    ```bash
    gh pr comment N --body "Clarification needed: [quote the ambiguous feedback]. Do you mean [interpretation A] or [interpretation B]?"
    ```
-   Set `awaiting_clarification` to `true` in state.json (keep `phase` as `codex-reviewing`). Do not make any code changes. Still send the review trigger so Codex can answer:
+   Set `awaiting_clarification` to `true` in state.json (keep `phase` as `codex-reviewing`). Do not make any code changes. Still send the review trigger so the audit agent can answer:
    ```bash
-   tmux send-keys -t codex "AUDIT: review PR #N"
+   tmux send-keys -t audit "AUDIT: review PR #N"
 ```
 Then in a **separate** bash call (do NOT chain with && or ;):
 ```bash
-tmux send-keys -t codex Enter
+tmux send-keys -t audit Enter
    ```
    Then stop and wait.
 
@@ -252,7 +252,7 @@ tmux send-keys -t codex Enter
    ```bash
    gh pr edit N --add-label "tests-failing"
    ```
-   Note the failure in the PR body. Attempt to fix the test failure once. If unable to fix, proceed — Codex will see the label and request changes.
+   Note the failure in the PR body. Attempt to fix the test failure once. If unable to fix, proceed — the audit agent will see the label and request changes.
 
    If tests pass and the PR previously had `tests-failing`:
    ```bash
@@ -271,7 +271,7 @@ tmux send-keys -t codex Enter
    git push
    ```
 
-10. **Increment `revision_round`** in state.json (Claude owns this counter — only increment when pushing an actual code change, not on clarification).
+10. **Increment `revision_round`** in state.json (The address agent owns this counter — only increment when pushing an actual code change, not on clarification).
 
     Write a `revision_history` entry:
     ```json
@@ -280,11 +280,11 @@ tmux send-keys -t codex Enter
 
     Update state.json: set `phase` to `codex-reviewing`, update `last_trigger_time`.
     ```bash
-    tmux send-keys -t codex "AUDIT: review PR #N"
+    tmux send-keys -t audit "AUDIT: review PR #N"
 ```
 Then in a **separate** bash call (do NOT chain with && or ;):
 ```bash
-tmux send-keys -t codex Enter
+tmux send-keys -t audit Enter
     ```
 
 ### Fix a batch (subroutine)
@@ -330,7 +330,7 @@ tmux send-keys -t codex Enter
 
    **4b. Fix each issue:**
 
-   If the issue is a **reopened recurrence** (Codex added a "recurrence detected" comment), the previous fix was insufficient. Identify the root cause and apply a systemic fix (validation middleware, shared helper, lint rule, regression test) rather than patching the same symptom again. Note the prior fix commit in the PR body.
+   If the issue is a **reopened recurrence** (the audit agent added a "recurrence detected" comment), the previous fix was insufficient. Identify the root cause and apply a systemic fix (validation middleware, shared helper, lint rule, regression test) rather than patching the same symptom again. Note the prior fix commit in the PR body.
 
    When **multiple issues in the batch share a root cause** (e.g., 3 unsanitized inputs in different handlers), prefer a single systemic fix over N individual patches. For example: add input validation middleware instead of sanitizing each handler separately.
 
@@ -415,13 +415,13 @@ tmux send-keys -t codex Enter
 
 12. Update state.json: set `current_pr` to the new PR number, `current_batch` to batch number, `batches_created` to new count, `revision_round` to 0, `revision_history` to `[]`, `phase` to `codex-reviewing`, update `last_trigger_time`.
 
-13. Notify Codex:
+13. Notify audit agent:
    ```bash
-   tmux send-keys -t codex "AUDIT: review PR #<number>"
+   tmux send-keys -t audit "AUDIT: review PR #<number>"
 ```
 Then in a **separate** bash call (do NOT chain with && or ;):
 ```bash
-tmux send-keys -t codex Enter
+tmux send-keys -t audit Enter
    ```
 
 ### Signal completion
@@ -429,11 +429,11 @@ tmux send-keys -t codex Enter
 Update state.json: set `phase` to `complete`, update `last_trigger_time`.
 
 ```bash
-tmux send-keys -t codex "AUDIT: complete"
+tmux send-keys -t audit "AUDIT: complete"
 ```
 Then in a **separate** bash call (do NOT chain with && or ;):
 ```bash
-tmux send-keys -t codex Enter
+tmux send-keys -t audit Enter
 ```
 
 Print:
@@ -447,16 +447,16 @@ PRs needing human review: <N> (labeled needs-human)
 
 ### Loop error handling
 
-- If `tmux send-keys -t codex` fails: stop, tell the user to start Codex in a tmux session named `codex`.
+- If `tmux send-keys -t audit` fails: stop, tell the user to start the audit agent in a tmux session named `audit`.
 - If `gh` commands fail: retry once, then stop with error.
 - If merge conflicts can't be resolved: label `needs-human`, send `ADDRESS: continue` behavior (move to next batch).
-- If tests fail after fixing: label `tests-failing`, note in PR body, proceed with review request (Codex will catch it).
+- If tests fail after fixing: label `tests-failing`, note in PR body, proceed with review request (the audit agent will catch it).
 
 ---
 
 ## Manual Protocol
 
-For direct use without the Codex loop. User pastes findings or provides a file path.
+For direct use without the audit loop. User pastes findings or provides a file path.
 
 ### Input Handling
 

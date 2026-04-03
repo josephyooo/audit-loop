@@ -1,16 +1,16 @@
 ---
 name: audit
-description: Audit the current repo, open GitHub issues for findings, then orchestrate Claude Code to fix them in batched PRs via tmux. Reviews each PR Claude opens and iterates until clean. Requires a Claude Code instance in a tmux session named "claude".
+description: Audit the current repo, open GitHub issues for findings, then orchestrate the address agent to fix them in batched PRs via tmux. Reviews each PR the address agent opens and iterates until clean. Requires an address agent in a tmux session named "address".
 ---
 
-# Audit & Review Loop (Codex Side)
+# Audit & Review Loop
 
-Audit the repo, file issues, trigger Claude to fix them, review each PR, and do a final sweep.
+Audit the repo, file issues, trigger the address agent to fix them, review each PR, and do a final sweep.
 
 ## Prerequisites
 
 - Current directory is a git repo
-- tmux sessions: `codex` (this session) and `claude` (Claude Code)
+- tmux sessions: `audit` (this session) and `address` (the address agent)
 - `gh` CLI authenticated with repo access
 
 ## Receive Protocol
@@ -125,21 +125,21 @@ Include enough detail that a fixer can work without re-auditing. Order by severi
 
 **Pattern detection:** After filing all issues, review them as a group. If 3+ issues share a root cause (e.g., multiple unsanitized inputs, repeated missing null checks in the same subsystem), add a comment to one of them noting the pattern and suggesting a systemic fix rather than N individual patches.
 
-### Step 4: Trigger Claude
+### Step 4: Trigger address agent
 
-Update state.json: set `phase` to `claude-fixing`, update `last_trigger_time`.
+Update state.json: set `phase` to `address-fixing`, update `last_trigger_time`.
 
 ```bash
-tmux send-keys -t claude "/address ADDRESS: begin"
+tmux send-keys -t address "/address ADDRESS: begin"
 ```
 Then in a **separate** bash call (do NOT chain with && or ;):
 ```bash
-tmux send-keys -t claude Enter
+tmux send-keys -t address Enter
 ```
 
-Print: "Triggered Claude. Waiting for review request..."
+Print: "Triggered address agent. Waiting for review request..."
 
-Then wait for Claude to send a message to this session.
+Then wait for the address agent to send a message to this session.
 
 ### Step 5: Handle incoming triggers
 
@@ -149,7 +149,7 @@ When a message arrives, first run the timeout check (see above). Then act based 
 
 Update state.json: set `phase` to `codex-reviewing`, `current_pr` to N, update `last_trigger_time`.
 
-1. **Check for clarification requests** from Claude before reviewing:
+1. **Check for clarification requests** from the address agent before reviewing:
    ```bash
    gh pr view N --json comments --jq '.comments[] | select(.body | startswith("Clarification needed:")) | .body'
    ```
@@ -157,11 +157,11 @@ Update state.json: set `phase` to `codex-reviewing`, `current_pr` to N, update `
    ```bash
    gh pr comment N --body "<answer the clarification>"
    ```
-   Then, **in this order** (Claude reads state.json immediately on trigger):
+   Then, **in this order** (the address agent reads state.json immediately on trigger):
    1. Set `awaiting_clarification` to `false` in state.json
    2. Send `ADDRESS: revise PR #N` via tmux
 
-   Do not proceed with the diff review — Claude will revise first.
+   Do not proceed with the diff review — the address agent will revise first.
 
 2. Read the PR:
    ```bash
@@ -203,18 +203,18 @@ Update state.json: set `phase` to `codex-reviewing`, `current_pr` to N, update `
    done
    ```
 
-   Update state.json: set `phase` to `claude-fixing`, `revision_round` to 0, update `last_trigger_time`.
+   Update state.json: set `phase` to `address-fixing`, `revision_round` to 0, update `last_trigger_time`.
    ```bash
-   tmux send-keys -t claude "ADDRESS: continue"
+   tmux send-keys -t address "ADDRESS: continue"
 ```
 Then in a **separate** bash call (do NOT chain with && or ;):
 ```bash
-tmux send-keys -t claude Enter
+tmux send-keys -t address Enter
    ```
 
    **If revisions are needed — request changes:**
 
-   Read `revision_round` from state.json. Do NOT increment it — Claude owns that counter and increments on push.
+   Read `revision_round` from state.json. Do NOT increment it — the address agent owns that counter and increments on push.
 
    **Convergence check (after 2nd revision, before requesting the 3rd):** If `revision_round` >= 2, check for convergence before requesting another round. Read `revision_history` from state.json and get the previous revision's commit SHA. Compare:
    ```bash
@@ -228,13 +228,13 @@ tmux send-keys -t claude Enter
    gh pr review N --comment --body "Revisions are not converging — same lines toggling across revisions. Escalating to human review."
    gh pr edit N --add-label "needs-human"
    ```
-   Update state.json: set `phase` to `claude-fixing`, `revision_round` to 0, update `last_trigger_time`.
+   Update state.json: set `phase` to `address-fixing`, `revision_round` to 0, update `last_trigger_time`.
    ```bash
-   tmux send-keys -t claude "ADDRESS: continue"
+   tmux send-keys -t address "ADDRESS: continue"
 ```
 Then in a **separate** bash call (do NOT chain with && or ;):
 ```bash
-tmux send-keys -t claude Enter
+tmux send-keys -t address Enter
    ```
 
    If `revision_round` >= 3 (cap reached):
@@ -242,13 +242,13 @@ tmux send-keys -t claude Enter
    gh pr review N --comment --body "3 revision rounds reached. Deferring remaining concerns to human review."
    gh pr edit N --add-label "needs-human"
    ```
-   Update state.json: set `phase` to `claude-fixing`, `revision_round` to 0, update `last_trigger_time`.
+   Update state.json: set `phase` to `address-fixing`, `revision_round` to 0, update `last_trigger_time`.
    ```bash
-   tmux send-keys -t claude "ADDRESS: continue"
+   tmux send-keys -t address "ADDRESS: continue"
 ```
 Then in a **separate** bash call (do NOT chain with && or ;):
 ```bash
-tmux send-keys -t claude Enter
+tmux send-keys -t address Enter
    ```
 
    Otherwise, use the structured review template — no prose reviews:
@@ -265,18 +265,18 @@ tmux send-keys -t claude Enter
    )"
    ```
 
-   The classifier tells Claude *how* to fix:
+   The classifier tells the address agent *how* to fix:
    - `WRONG` — logic error, revert and re-approach
    - `INCOMPLETE` — fix is correct but doesn't cover all cases
    - `REGRESSION` — fix breaks something that was working
 
-   Update state.json: set `phase` to `claude-fixing`, update `last_trigger_time`.
+   Update state.json: set `phase` to `address-fixing`, update `last_trigger_time`.
    ```bash
-   tmux send-keys -t claude "ADDRESS: revise PR #N"
+   tmux send-keys -t address "ADDRESS: revise PR #N"
 ```
 Then in a **separate** bash call (do NOT chain with && or ;):
 ```bash
-tmux send-keys -t claude Enter
+tmux send-keys -t address Enter
    ```
 
 #### On "AUDIT: complete"
@@ -305,6 +305,6 @@ Proceed to Step 6.
 
 ## Error handling
 
-- If `tmux send-keys -t claude` fails: stop and tell the user to start Claude Code in a tmux session named `claude`.
+- If `tmux send-keys -t address` fails: stop and tell the user to start the address agent in a tmux session named `address`.
 - If `gh` commands fail: retry once, then print the error and stop.
-- If Claude never responds: print "Waiting for Claude. If it has stopped, restart it in the `claude` tmux session and type `ADDRESS: begin` to resume."
+- If the address agent never responds: print "Waiting for address agent. If it has stopped, restart it in the `address` tmux session and type `ADDRESS: begin` to resume."
