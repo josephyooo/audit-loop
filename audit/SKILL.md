@@ -13,6 +13,24 @@ Audit the repo, file issues, trigger the address agent to fix them, review each 
 - tmux sessions: `audit` (this session) and `address` (the address agent)
 - `gh` CLI authenticated with repo access
 
+## Sending Triggers — CRITICAL RULES
+
+Every `tmux send-keys` that sends a trigger phrase to the other agent **MUST** follow all three rules below. Violating any one of them breaks the loop silently.
+
+1. **The quoted string MUST end with a trailing space.** Example: `"ADDRESS: revise PR #4 "` — note the space before the closing quote. This is required because Copilot CLI (and some other agents) autocomplete on `#<number>`; without the trailing space, pressing Enter selects an autocomplete suggestion instead of submitting your literal text. Do NOT strip or "clean up" this trailing space — it is load-bearing.
+2. **Enter MUST be sent in a separate bash call.** Not chained with `&&` or `;`. Two distinct bash tool invocations.
+3. **Do not substitute `C-m` for `Enter`** — they behave differently in some agent terminals.
+
+Correct pattern (two separate bash calls):
+```bash
+tmux send-keys -t address "ADDRESS: revise PR #4 "
+```
+```bash
+tmux send-keys -t address Enter
+```
+
+Every send-keys snippet below follows this pattern. Preserve it exactly.
+
 ## Receive Protocol
 
 **On any input**, check whether it matches a known trigger phrase (`AUDIT: review PR #N` or `AUDIT: complete`). If it does, handle it per the protocol below.
@@ -132,7 +150,7 @@ Update state.json: set `phase` to `address-fixing`, update `last_trigger_time`.
 ```bash
 tmux send-keys -t address "/address ADDRESS: begin "
 ```
-Then in a **separate** bash call (do NOT chain with && or ;):
+Then in a **separate** bash call (preserve the trailing space above; do NOT chain with && or ;):
 ```bash
 tmux send-keys -t address Enter
 ```
@@ -207,7 +225,7 @@ Update state.json: set `phase` to `reviewing`, `current_pr` to N, update `last_t
    ```bash
    tmux send-keys -t address "ADDRESS: continue "
 ```
-Then in a **separate** bash call (do NOT chain with && or ;):
+Then in a **separate** bash call (preserve the trailing space above; do NOT chain with && or ;):
 ```bash
 tmux send-keys -t address Enter
    ```
@@ -232,7 +250,7 @@ tmux send-keys -t address Enter
    ```bash
    tmux send-keys -t address "ADDRESS: continue "
 ```
-Then in a **separate** bash call (do NOT chain with && or ;):
+Then in a **separate** bash call (preserve the trailing space above; do NOT chain with && or ;):
 ```bash
 tmux send-keys -t address Enter
    ```
@@ -246,7 +264,7 @@ tmux send-keys -t address Enter
    ```bash
    tmux send-keys -t address "ADDRESS: continue "
 ```
-Then in a **separate** bash call (do NOT chain with && or ;):
+Then in a **separate** bash call (preserve the trailing space above; do NOT chain with && or ;):
 ```bash
 tmux send-keys -t address Enter
    ```
@@ -274,7 +292,7 @@ tmux send-keys -t address Enter
    ```bash
    tmux send-keys -t address "ADDRESS: revise PR #N "
 ```
-Then in a **separate** bash call (do NOT chain with && or ;):
+Then in a **separate** bash call (preserve the trailing space above; do NOT chain with && or ;):
 ```bash
 tmux send-keys -t address Enter
    ```

@@ -77,7 +77,7 @@ AUDIT: review PR #N           # PR ready for review
 AUDIT: complete                # all batches done
 ```
 
-**Important:** The text and `Enter` must be sent as separate bash calls. Chaining with `&&` or `;` causes a newline instead of submit.
+**Important:** Trigger phrases must be sent with a trailing space inside the quotes (e.g. `"AUDIT: review PR #4 "`) because Copilot CLI autocompletes `#<number>` references - without the space, Enter selects a suggestion instead of submitting the literal text. The text and `Enter` must also be sent as separate bash calls; chaining with `&&` or `;` causes a newline instead of submit.
 
 ## Safety Caps
 

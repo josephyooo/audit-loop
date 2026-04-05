@@ -24,6 +24,24 @@ Fix code issues identified by an external audit. Operates in two modes:
 
 Triggered by the audit agent via tmux send-keys. All GitHub operations use `gh` CLI.
 
+### Sending Triggers — CRITICAL RULES
+
+Every `tmux send-keys` that sends a trigger phrase to the other agent **MUST** follow all three rules below. Violating any one of them breaks the loop silently.
+
+1. **The quoted string MUST end with a trailing space.** Example: `"AUDIT: review PR #4 "` — note the space before the closing quote. This is required because Copilot CLI (and some other agents) autocomplete on `#<number>`; without the trailing space, pressing Enter selects an autocomplete suggestion instead of submitting your literal text. Do NOT strip or "clean up" this trailing space — it is load-bearing.
+2. **Enter MUST be sent in a separate bash call.** Not chained with `&&` or `;`. Two distinct bash tool invocations.
+3. **Do not substitute `C-m` for `Enter`** — they behave differently in some agent terminals.
+
+Correct pattern (two separate bash calls):
+```bash
+tmux send-keys -t audit "AUDIT: review PR #4 "
+```
+```bash
+tmux send-keys -t audit Enter
+```
+
+Every send-keys snippet below follows this pattern. Preserve it exactly.
+
 ### Receive Protocol
 
 **On any input**, check whether it matches a known trigger phrase (`ADDRESS: begin`, `ADDRESS: continue`, `ADDRESS: revise PR #N`). If it does, handle it per the protocol below.
@@ -107,7 +125,7 @@ Update state.json: set `last_trigger` to `ADDRESS: begin`, update `last_trigger_
    ```bash
    tmux send-keys -t audit "AUDIT: review PR #<number> "
    ```
-   Then in a **separate** bash call ( do NOT chain with && or ; ):
+   Then in a **separate** bash call (preserve the trailing space above; do NOT chain with && or ;):
    ```bash
    tmux send-keys -t audit Enter
    ```
@@ -230,7 +248,7 @@ Update state.json: set `last_trigger` to `ADDRESS: revise PR #N`, update `last_t
    ```bash
    tmux send-keys -t audit "AUDIT: review PR #N "
    ```
-   Then in a **separate** bash call ( do NOT chain with && or ; ):
+   Then in a **separate** bash call (preserve the trailing space above; do NOT chain with && or ;):
    ```bash
    tmux send-keys -t audit Enter
    ```
@@ -300,7 +318,7 @@ Update state.json: set `last_trigger` to `ADDRESS: revise PR #N`, update `last_t
     tmux send-keys -t audit "AUDIT: review PR #N "
     ```
 
-    Then in a **separate** bash call ( do NOT chain with && or ; ):
+    Then in a **separate** bash call (preserve the trailing space above; do NOT chain with && or ;):
     ```bash
     tmux send-keys -t audit Enter
     ```
@@ -437,7 +455,7 @@ Update state.json: set `last_trigger` to `ADDRESS: revise PR #N`, update `last_t
    ```bash
    tmux send-keys -t audit "AUDIT: review PR #<number> "
    ```
-   Then in a **separate** bash call ( do NOT chain with && or ; ):
+   Then in a **separate** bash call (preserve the trailing space above; do NOT chain with && or ;):
    ```bash
    tmux send-keys -t audit Enter
    ```
@@ -449,7 +467,7 @@ Update state.json: set `phase` to `complete`, update `last_trigger_time`.
 ```bash
 tmux send-keys -t audit "AUDIT: complete "
 ```
-Then in a **separate** bash call ( do NOT chain with && or ; ):
+Then in a **separate** bash call (preserve the trailing space above; do NOT chain with && or ;):
 ```bash
 tmux send-keys -t audit Enter
 ```
