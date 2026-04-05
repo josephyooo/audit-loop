@@ -105,7 +105,7 @@ Update state.json: set `last_trigger` to `ADDRESS: begin`, update `last_trigger_
    ```
    If found, treat that PR as the current batch. Update state.json with `current_pr` and send:
    ```bash
-   tmux send-keys -t audit "AUDIT: review PR #<number>"
+   tmux send-keys -t audit "AUDIT: review PR #<number> "
    ```
    Then in a **separate** bash call ( do NOT chain with && or ; ):
    ```bash
@@ -228,7 +228,7 @@ Update state.json: set `last_trigger` to `ADDRESS: revise PR #N`, update `last_t
    ```
    Set `awaiting_clarification` to `true` in state.json (keep `phase` as `reviewing`). Do not make any code changes. Still send the review trigger so the audit agent can answer:
    ```bash
-   tmux send-keys -t audit "AUDIT: review PR #N"
+   tmux send-keys -t audit "AUDIT: review PR #N "
    ```
    Then in a **separate** bash call ( do NOT chain with && or ; ):
    ```bash
@@ -297,7 +297,7 @@ Update state.json: set `last_trigger` to `ADDRESS: revise PR #N`, update `last_t
 
     Update state.json: set `phase` to `reviewing`, update `last_trigger_time`.
     ```bash
-    tmux send-keys -t audit "AUDIT: review PR #N"
+    tmux send-keys -t audit "AUDIT: review PR #N "
     ```
 
     Then in a **separate** bash call ( do NOT chain with && or ; ):
@@ -435,7 +435,7 @@ Update state.json: set `last_trigger` to `ADDRESS: revise PR #N`, update `last_t
 
 13. Notify audit agent:
    ```bash
-   tmux send-keys -t audit "AUDIT: review PR #<number>"
+   tmux send-keys -t audit "AUDIT: review PR #<number> "
    ```
    Then in a **separate** bash call ( do NOT chain with && or ; ):
    ```bash
@@ -447,7 +447,7 @@ Update state.json: set `last_trigger` to `ADDRESS: revise PR #N`, update `last_t
 Update state.json: set `phase` to `complete`, update `last_trigger_time`.
 
 ```bash
-tmux send-keys -t audit "AUDIT: complete"
+tmux send-keys -t audit "AUDIT: complete "
 ```
 Then in a **separate** bash call ( do NOT chain with && or ; ):
 ```bash

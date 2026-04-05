@@ -130,7 +130,7 @@ Include enough detail that a fixer can work without re-auditing. Order by severi
 Update state.json: set `phase` to `address-fixing`, update `last_trigger_time`.
 
 ```bash
-tmux send-keys -t address "/address ADDRESS: begin"
+tmux send-keys -t address "/address ADDRESS: begin "
 ```
 Then in a **separate** bash call (do NOT chain with && or ;):
 ```bash
@@ -205,7 +205,7 @@ Update state.json: set `phase` to `reviewing`, `current_pr` to N, update `last_t
 
    Update state.json: set `phase` to `address-fixing`, `revision_round` to 0, update `last_trigger_time`.
    ```bash
-   tmux send-keys -t address "ADDRESS: continue"
+   tmux send-keys -t address "ADDRESS: continue "
 ```
 Then in a **separate** bash call (do NOT chain with && or ;):
 ```bash
@@ -230,7 +230,7 @@ tmux send-keys -t address Enter
    ```
    Update state.json: set `phase` to `address-fixing`, `revision_round` to 0, update `last_trigger_time`.
    ```bash
-   tmux send-keys -t address "ADDRESS: continue"
+   tmux send-keys -t address "ADDRESS: continue "
 ```
 Then in a **separate** bash call (do NOT chain with && or ;):
 ```bash
@@ -244,7 +244,7 @@ tmux send-keys -t address Enter
    ```
    Update state.json: set `phase` to `address-fixing`, `revision_round` to 0, update `last_trigger_time`.
    ```bash
-   tmux send-keys -t address "ADDRESS: continue"
+   tmux send-keys -t address "ADDRESS: continue "
 ```
 Then in a **separate** bash call (do NOT chain with && or ;):
 ```bash
@@ -272,7 +272,7 @@ tmux send-keys -t address Enter
 
    Update state.json: set `phase` to `address-fixing`, update `last_trigger_time`.
    ```bash
-   tmux send-keys -t address "ADDRESS: revise PR #N"
+   tmux send-keys -t address "ADDRESS: revise PR #N "
 ```
 Then in a **separate** bash call (do NOT chain with && or ;):
 ```bash
