@@ -1,6 +1,6 @@
 # audit-loop
 
-> **Note**: This project was built entirely with [Claude Code](https://claude.ai/claude-code). Code, documentation, and commit messages were AI-generated with human direction and review.
+> **Note**: This project was built with [Claude Code](https://claude.ai/claude-code). Code, documentation, and commit messages were AI-generated with human direction and review.
 
 Agent-agnostic skills that orchestrate an automated audit-fix loop between any two AI coding agents via tmux, using GitHub issues and PRs as the shared state store.
 
@@ -44,7 +44,7 @@ In the `audit` session, run `/audit`. Everything else is automatic.
 
 ### What happens
 
-1. The audit agent audits the repo and opens GitHub issues (labeled `codex-audit` + severity + category)
+1. The audit agent audits the repo and opens GitHub issues (labeled `audit-loop` + severity + category)
 2. The audit agent sends `/address ADDRESS: begin` to the address agent via tmux
 3. The address agent groups related issues into batches, writes root cause hypotheses, fixes batch 1, opens a PR
 4. The address agent sends `AUDIT: review PR #N` to the audit agent
@@ -96,7 +96,7 @@ Hypotheses are written to `{repo}/.audit-loop/batch-N-hypotheses.md` before any 
 ## Labels
 
 ### Static (set at issue creation)
-- `codex-audit`, `severity:{critical,high,medium,low}`, `cat:{security,correctness,performance,maintainability,dependency}`
+- `audit-loop`, `severity:{critical,high,medium,low}`, `cat:{security,correctness,performance,maintainability,dependency}`
 
 ### State transitions (IssueOps FSM)
 - `in-progress` -> `fix-submitted` -> `fix-verified` -> closed
@@ -106,10 +106,10 @@ Hypotheses are written to `{repo}/.audit-loop/batch-N-hypotheses.md` before any 
 
 ## Anti-Thrashing
 
-- **Hypothesis gate**: Claude must articulate root cause, fix, and risk before editing
-- **Structured reviews**: Codex uses `WRONG|INCOMPLETE|REGRESSION` classifiers with specific file/behavior/change fields
-- **Nitpick guard**: Codex approves if functionally correct, no style-only rejections
+- **Hypothesis gate**: Addressing agent must articulate root cause, fix, and risk before editing
+- **Structured reviews**: Auditing agent uses `WRONG|INCOMPLETE|REGRESSION` classifiers with specific file/behavior/change fields
+- **Nitpick guard**: Auditing agent approves if functionally correct, no style-only rejections
 - **Convergence detection**: At revision round 2, if diffs are cancelling out, escalate instead of looping
-- **Clarification flow**: Claude asks instead of guessing on ambiguous feedback
+- **Clarification flow**: Addressing agent asks instead of guessing on ambiguous feedback
 - **Scope ceiling**: Systemic fixes limited to 3 extra files; larger fixes get their own issue
-- **Duplicate detection**: Codex reopens prior issues with escalated severity instead of filing duplicates
+- **Duplicate detection**: Auditing agent reopens prior issues with escalated severity instead of filing duplicates

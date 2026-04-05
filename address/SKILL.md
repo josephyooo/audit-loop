@@ -65,7 +65,7 @@ On receiving any trigger, read `last_trigger_time` and `awaiting_clarification` 
 **If `awaiting_clarification` is false** and more than 30 minutes have elapsed:
 
 ```bash
-for pr in $(gh pr list --label codex-audit --state open --json number -q '.[].number'); do
+for pr in $(gh pr list --label audit-loop --state open --json number -q '.[].number'); do
   gh pr edit "$pr" --add-label "needs-human"
 done
 ```
@@ -76,7 +76,7 @@ Update state.json: set `phase` to `complete`. Do NOT send a tmux trigger (the ot
 
 ### Trigger phrases
 
-- `ADDRESS: begin` — Read all open `codex-audit` issues, plan batches, fix batch 1
+- `ADDRESS: begin` — Read all open `audit-loop` issues, plan batches, fix batch 1
 - `ADDRESS: continue` — Current PR was approved (or escalated). Merge it, move to next batch.
 - `ADDRESS: revise PR #N` — Audit agent requested changes. Read review comments and revise.
 
@@ -98,18 +98,18 @@ Update state.json: set `last_trigger` to `ADDRESS: begin`, update `last_trigger_
    gh repo view --json defaultBranchRef -q '.defaultBranchRef.name'
    ```
 
-2. **Deadlock recovery:** Before grouping new issues, check for open `codex-audit` PRs without reviews:
+2. **Deadlock recovery:** Before grouping new issues, check for open `audit-loop` PRs without reviews:
    ```bash
-   gh pr list --label codex-audit --state open --json number,reviews \
+   gh pr list --label audit-loop --state open --json number,reviews \
      --jq '.[] | select(.reviews | length == 0) | .number'
    ```
    If found, treat that PR as the current batch. Update state.json with `current_pr` and send:
    ```bash
    tmux send-keys -t audit "AUDIT: review PR #<number>"
-```
-Then in a **separate** bash call (do NOT chain with && or ;):
-```bash
-tmux send-keys -t audit Enter
+   ```
+   Then in a **separate** bash call ( do NOT chain with && or ; ):
+   ```bash
+   tmux send-keys -t audit Enter
    ```
    Then wait. Do NOT create new batches.
 
@@ -117,7 +117,7 @@ tmux send-keys -t audit Enter
 
 3. **Check for orphaned in-progress issues** from an interrupted batch:
    ```bash
-   gh issue list --label in-progress --label codex-audit --state open --json number,title
+   gh issue list --label in-progress --label audit-loop --state open --json number,title
    ```
    If found, check whether their audit branch exists:
    ```bash
@@ -129,7 +129,7 @@ tmux send-keys -t audit Enter
 
 4. Fetch all open audit issues:
    ```bash
-   gh issue list --label codex-audit --state open --json number,title,labels,body --limit 100
+   gh issue list --label audit-loop --state open --json number,title,labels,body --limit 100
    ```
 
 4. If no issues found, signal completion immediately (see "Signal completion" below).
@@ -184,7 +184,7 @@ Update state.json: set `last_trigger` to `ADDRESS: continue`, `revision_round` t
 
 4. Check for remaining open issues:
    ```bash
-   gh issue list --label codex-audit --state open --json number,title,labels,body --limit 100
+   gh issue list --label audit-loop --state open --json number,title,labels,body --limit 100
    ```
    If none remain, signal completion. Otherwise, fix the next batch.
 
@@ -226,13 +226,13 @@ Update state.json: set `last_trigger` to `ADDRESS: revise PR #N`, update `last_t
    ```bash
    gh pr comment N --body "Clarification needed: [quote the ambiguous feedback]. Do you mean [interpretation A] or [interpretation B]?"
    ```
-   Set `awaiting_clarification` to `true` in state.json (keep `phase` as `codex-reviewing`). Do not make any code changes. Still send the review trigger so the audit agent can answer:
+   Set `awaiting_clarification` to `true` in state.json (keep `phase` as `reviewing`). Do not make any code changes. Still send the review trigger so the audit agent can answer:
    ```bash
    tmux send-keys -t audit "AUDIT: review PR #N"
-```
-Then in a **separate** bash call (do NOT chain with && or ;):
-```bash
-tmux send-keys -t audit Enter
+   ```
+   Then in a **separate** bash call ( do NOT chain with && or ; ):
+   ```bash
+   tmux send-keys -t audit Enter
    ```
    Then stop and wait.
 
@@ -295,13 +295,14 @@ tmux send-keys -t audit Enter
     { "round": <revision_round>, "pr": N, "commit": "<git rev-parse HEAD>", "summary": "<one-line description>" }
     ```
 
-    Update state.json: set `phase` to `codex-reviewing`, update `last_trigger_time`.
+    Update state.json: set `phase` to `reviewing`, update `last_trigger_time`.
     ```bash
     tmux send-keys -t audit "AUDIT: review PR #N"
-```
-Then in a **separate** bash call (do NOT chain with && or ;):
-```bash
-tmux send-keys -t audit Enter
+    ```
+
+    Then in a **separate** bash call ( do NOT chain with && or ; ):
+    ```bash
+    tmux send-keys -t audit Enter
     ```
 
 ### Fix a batch (subroutine)
@@ -351,7 +352,7 @@ tmux send-keys -t audit Enter
 
    When **multiple issues in the batch share a root cause** (e.g., 3 unsanitized inputs in different handlers), prefer a single systemic fix over N individual patches. For example: add input validation middleware instead of sanitizing each handler separately.
 
-   **Scope ceiling:** A systemic fix may touch at most 3 files not directly referenced in the batch's issues. If fixing the root cause properly requires more, open a separate issue titled "Systemic: <root cause>" with your proposed fix plan, label it `codex-audit` + `severity:high` + the matching `cat:` label, and apply a scoped partial fix to the immediate symptoms instead.
+   **Scope ceiling:** A systemic fix may touch at most 3 files not directly referenced in the batch's issues. If fixing the root cause properly requires more, open a separate issue titled "Systemic: <root cause>" with your proposed fix plan, label it `audit-loop` + `severity:high` + the matching `cat:` label, and apply a scoped partial fix to the immediate symptoms instead.
 
    For each issue:
    - Read the referenced file(s) — don't fix blind
@@ -412,7 +413,7 @@ tmux send-keys -t audit Enter
 
    ## Test plan
    <how to verify the fixes>" \
-     --label "codex-audit" --label "audit-batch-<N>"
+     --label "audit-loop" --label "audit-batch-<N>"
    ```
 
    If tests are failing, also add `--label "tests-failing"`.
@@ -430,15 +431,15 @@ tmux send-keys -t audit Enter
     done
     ```
 
-12. Update state.json: set `current_pr` to the new PR number, `current_batch` to batch number, `batches_created` to new count, `revision_round` to 0, `revision_history` to `[]`, `phase` to `codex-reviewing`, update `last_trigger_time`.
+12. Update state.json: set `current_pr` to the new PR number, `current_batch` to batch number, `batches_created` to new count, `revision_round` to 0, `revision_history` to `[]`, `phase` to `reviewing`, update `last_trigger_time`.
 
 13. Notify audit agent:
    ```bash
    tmux send-keys -t audit "AUDIT: review PR #<number>"
-```
-Then in a **separate** bash call (do NOT chain with && or ;):
-```bash
-tmux send-keys -t audit Enter
+   ```
+   Then in a **separate** bash call ( do NOT chain with && or ; ):
+   ```bash
+   tmux send-keys -t audit Enter
    ```
 
 ### Signal completion
@@ -448,7 +449,7 @@ Update state.json: set `phase` to `complete`, update `last_trigger_time`.
 ```bash
 tmux send-keys -t audit "AUDIT: complete"
 ```
-Then in a **separate** bash call (do NOT chain with && or ;):
+Then in a **separate** bash call ( do NOT chain with && or ; ):
 ```bash
 tmux send-keys -t audit Enter
 ```
@@ -458,7 +459,7 @@ Print:
 ## Audit Fix Complete
 Batches completed: <N>
 Issues fixed: <N>
-Issues remaining: <N> (open with codex-audit label)
+Issues remaining: <N> (open with audit-loop label)
 PRs needing human review: <N> (labeled needs-human)
 ```
 
@@ -519,7 +520,7 @@ For each finding, check if it's new or recurring:
    git blame -L {start},{end} {filepath}
    ```
 
-3. **Memory check** — scan `~/.claude/projects/*/memory/MEMORY.md` for past audit references.
+3. **Memory check** — if your agent has a persistent memory/notes system, scan it for past audit references.
 
 4. Classify: **New**, **Recurring** (note prior commit), **Known** (documented tech debt), **Regression** (was fixed, reappeared — flag prominently).
 

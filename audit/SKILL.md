@@ -17,7 +17,7 @@ Audit the repo, file issues, trigger the address agent to fix them, review each 
 
 **On any input**, check whether it matches a known trigger phrase (`AUDIT: review PR #N` or `AUDIT: complete`). If it does, handle it per the protocol below.
 
-**On session start or after any interruption**, check `.audit-loop/state.json`. If a cycle is in progress and `phase` is `codex-reviewing`, resume by re-reading the current PR and reviewing it. If `phase` is `codex-auditing`, the audit was interrupted — restart from Step 1.
+**On session start or after any interruption**, check `.audit-loop/state.json`. If a cycle is in progress and `phase` is `reviewing`, resume by re-reading the current PR and reviewing it. If `phase` is `audit-looping`, the audit was interrupted — restart from Step 1.
 
 **Important:** `needs-human` on one PR does NOT halt the cycle. The agent proceeds to the next batch. Only the capped PR is deferred.
 
@@ -33,7 +33,7 @@ On receiving any trigger, read `last_trigger_time` from state.json. If more than
 
 ```bash
 # Label all open audit PRs as needs-human
-for pr in $(gh pr list --label codex-audit --state open --json number -q '.[].number'); do
+for pr in $(gh pr list --label audit-loop --state open --json number -q '.[].number'); do
   gh pr edit "$pr" --add-label "needs-human"
 done
 ```
@@ -70,7 +70,7 @@ Write initial state:
 cat > .audit-loop/state.json << 'STATEEOF'
 {
   "cycle_id": "TIMESTAMP",
-  "phase": "codex-auditing",
+  "phase": "audit-looping",
   "current_pr": null,
   "current_batch": 0,
   "revision_round": 0,
@@ -88,17 +88,17 @@ Replace `TIMESTAMP` and `ISO8601_NOW` with actual values.
 Ensure labels exist (run once):
 
 ```bash
-for label in codex-audit severity:critical severity:high severity:medium severity:low \
+for label in audit-loop severity:critical severity:high severity:medium severity:low \
   cat:security cat:correctness cat:performance cat:maintainability cat:dependency \
   needs-human tests-failing in-progress fix-submitted fix-verified; do
   gh label create "$label" --force 2>/dev/null
 done
 ```
 
-**Before filing each issue, check for duplicates** among previously closed `codex-audit` issues:
+**Before filing each issue, check for duplicates** among previously closed `audit-loop` issues:
 
 ```bash
-gh issue list --label codex-audit --state closed --json number,title,body,labels --limit 200
+gh issue list --label audit-loop --state closed --json number,title,body,labels --limit 200
 ```
 
 For each finding, search the closed issues for matches on the same file path and category. If a match is found:
@@ -118,7 +118,7 @@ If no duplicate is found, create a new issue:
 ```bash
 gh issue create --title "<concise title>" \
   --body "<file path, line range, what's wrong, why it matters, suggested fix>" \
-  --label "codex-audit" --label "severity:<level>" --label "cat:<category>"
+  --label "audit-loop" --label "severity:<level>" --label "cat:<category>"
 ```
 
 Include enough detail that a fixer can work without re-auditing. Order by severity (critical first).
@@ -147,7 +147,7 @@ When a message arrives, first run the timeout check (see above). Then act based 
 
 #### On "AUDIT: review PR #N"
 
-Update state.json: set `phase` to `codex-reviewing`, `current_pr` to N, update `last_trigger_time`.
+Update state.json: set `phase` to `reviewing`, `current_pr` to N, update `last_trigger_time`.
 
 1. **Check for clarification requests** from the address agent before reviewing:
    ```bash
@@ -289,7 +289,7 @@ Proceed to Step 6.
 
 1. List remaining open issues:
    ```bash
-   gh issue list --label codex-audit --state open
+   gh issue list --label audit-loop --state open
    ```
 
 2. Summarize:
