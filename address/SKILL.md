@@ -364,10 +364,11 @@ Update state.json: set `last_trigger` to `ADDRESS: revise PR #N`, update `last_t
 
 1. Read `batches_created` from state.json, increment by 1. This is the batch number.
 
-2. Create a branch:
+2. Create a branch. Sanitize the slug so it is a valid, safe git ref name:
    ```bash
    git checkout <default-branch> && git pull
-   git checkout -b audit/<short-slug>
+   slug=$(printf '%s' '<short-slug>' | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9-' '-' | head -c 60 | sed 's/^-//;s/-$//')
+   git checkout -b "audit/$slug"
    ```
 
 3. Create the batch label if needed:
@@ -451,11 +452,12 @@ Update state.json: set `last_trigger` to `ADDRESS: revise PR #N`, update `last_t
 
    If the diff contains out-of-scope changes, revert them with `git checkout HEAD~1 -- <file>` and amend the commit.
 
-10. Push and create PR:
+10. Push and create PR. Sanitize the title to strip shell metacharacters:
    ```bash
-   git push -u origin audit/<short-slug>
+   git push -u origin "audit/$slug"
+   pr_title=$(printf 'audit: %s' '<batch summary>' | tr -d '`$"' | head -c 70)
    gh pr create \
-     --title "audit: <batch summary>" \
+     --title "$pr_title" \
      --body "$(cat <<'PREOF'
    ## Audit Fixes (Batch <N>)
 
