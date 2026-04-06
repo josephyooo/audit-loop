@@ -117,7 +117,9 @@ cat > .audit-loop/state.json << 'STATEEOF'
   "revision_round": 0,
   "batches_created": 0,
   "last_trigger": "audit-start",
-  "last_trigger_time": "ISO8601_NOW"
+  "last_trigger_time": "ISO8601_NOW",
+  "awaiting_clarification": false,
+  "revision_history": []
 }
 STATEEOF
 ```
@@ -193,19 +195,28 @@ When a message arrives, first run the timeout check (see above). Then act based 
 
 Update state.json: set `phase` to `reviewing`, `current_pr` to N, update `last_trigger_time`.
 
-1. **Check for clarification requests** from the address agent before reviewing:
+1. **Check for pending clarification** using the state file, not comment history:
+   
+   Read `awaiting_clarification` from `.audit-loop/state.json`. If `false`, skip to step 2.
+   
+   If `true`, the address agent is blocked on a clarification. Find the unanswered question:
    ```bash
-   gh pr view N --json comments --jq '.comments[] | select(.body | startswith("Clarification needed:")) | .body'
+   gh pr view N --json comments --jq '[.comments[] | select(.body | startswith("Clarification needed:"))] | last | .body'
    ```
-   If a clarification comment exists without a follow-up response, answer it directly based on your original review intent:
+   Answer it directly based on your original review intent:
    ```bash
-   gh pr comment N --body "<answer the clarification>"
+   gh pr comment N --body "$(cat <<'EOF'
+   <answer the clarification>
+   EOF
+   )"
    ```
    Then, **in this order** (the address agent reads state.json immediately on trigger):
    1. Set `awaiting_clarification` to `false` in state.json
    2. Send `ADDRESS: revise PR #N` via tmux
 
    Do not proceed with the diff review — the address agent will revise first.
+   
+   **Important:** Do NOT search for clarification comments when `awaiting_clarification` is `false`. Historical clarification comments that have already been answered must be ignored — the state flag is the source of truth, not the comment history.
 
 2. Read the PR:
    ```bash
