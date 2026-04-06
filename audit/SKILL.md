@@ -307,18 +307,40 @@ Proceed to Step 6.
 
 ### Step 6: Final sweep
 
-1. List remaining open issues:
+1. **Check for critiqued issues.** The address agent may have removed the `audit-loop` label from issues that were unclear or invalid. Find them:
+   ```bash
+   gh issue list --state open --json number,title,body,comments,labels --limit 100 \
+     --jq '[.[] | select(.comments[-1].body | startswith("Issue needs clarification"))]'
+   ```
+   For each critiqued issue:
+   - Read the address agent's comment to understand what's unclear
+   - Revise the issue: rewrite the title/body with clearer scope, concrete acceptance criteria, and verified file references
+   - Re-label it so it's picked up on the next cycle:
+     ```bash
+     gh issue edit <number> --add-label "audit-loop"
+     ```
+   After revising all critiqued issues, if any were re-labeled and there are no other open `audit-loop` issues being worked on, trigger a follow-up:
+   ```bash
+   tmux send-keys -t address "ADDRESS: begin "
+   ```
+   Then in a **separate** bash call (preserve the trailing space above; do NOT chain with && or ;):
+   ```bash
+   tmux send-keys -t address Enter
+   ```
+
+2. List remaining open issues:
    ```bash
    gh issue list --label audit-loop --state open
    ```
 
-2. Summarize:
+3. Summarize:
    ```
    ## Audit Complete
 
    Issues filed: <N>
    PRs created: <N>
    Issues resolved: <N>
+   Issues revised after critique: <N>
    Issues remaining: <N>
    Escalated to human: <N> (labeled needs-human)
    ```

@@ -49,13 +49,14 @@ In the `audit` session, run `/audit`. Everything else is automatic.
 
 1. The audit agent audits the repo and opens GitHub issues (labeled `audit-loop` + severity + category)
 2. The audit agent sends `/address ADDRESS: begin` to the address agent via tmux
-3. The address agent groups related issues into batches, writes root cause hypotheses, fixes batch 1, opens a PR
-4. The address agent sends `AUDIT: review PR #N` to the audit agent
-5. The audit agent reviews the PR:
+3. The address agent validates each issue (clear scope, concrete criteria, real files). Unclear issues get a comment and lose the `audit-loop` label.
+4. The address agent groups valid issues into batches, writes root cause hypotheses, fixes batch 1, opens a PR
+5. The address agent sends `AUDIT: review PR #N` to the audit agent
+6. The audit agent reviews the PR:
    - **Approve** -> address agent merges and starts the next batch
    - **Request changes** (structured `WRONG|INCOMPLETE|REGRESSION` feedback) -> address agent revises
-6. Repeat until all issues are addressed or safety caps are hit
-7. The audit agent does a final sweep and prints a summary
+7. Repeat until all issues are addressed or safety caps are hit
+8. The audit agent does a final sweep: revises any critiqued issues, re-labels them, and triggers another round if needed
 
 ### Manual mode
 

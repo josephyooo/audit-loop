@@ -152,14 +152,27 @@ Update state.json: set `last_trigger` to `ADDRESS: begin`, update `last_trigger_
 
 4. If no issues found, signal completion immediately (see "Signal completion" below).
 
-5. Group issues into batches by relatedness:
+5. **Validate each issue before planning work.** For each issue, check:
+   - Is the scope clear enough to implement? (not vague like "improve performance")
+   - Are the acceptance criteria concrete and verifiable?
+   - Does it conflict with or duplicate another open issue?
+   - Are the referenced files/APIs real? (quick check — `ls` or `grep`)
+
+   If an issue fails validation, comment explaining what's unclear and remove the `audit-loop` label so it drops out of the batch:
+   ```bash
+   gh issue comment <number> --body "Issue needs clarification before work can begin: <what's unclear>"
+   gh issue edit <number> --remove-label "audit-loop"
+   ```
+   Continue with the remaining valid issues.
+
+6. Group valid issues into batches by relatedness:
    - Same file or subsystem/directory → same batch
    - Same category (e.g., all `cat:security` input validation) → same batch
    - Unrelated issues → separate batches
    - Order batches by severity (critical/high first)
    - Target 2-5 issues per batch. Single-issue batches are fine for complex fixes.
 
-6. Print the batch plan:
+7. Print the batch plan:
    ```
    ## Batch Plan
    Batch 1: #12, #13, #15 (auth input validation)
@@ -167,7 +180,7 @@ Update state.json: set `last_trigger` to `ADDRESS: begin`, update `last_trigger_
    Batch 3: #16 (deprecated dependency)
    ```
 
-7. Fix batch 1 (see "Fix a batch" below).
+8. Fix batch 1 (see "Fix a batch" below).
 
 ### On "ADDRESS: continue"
 
