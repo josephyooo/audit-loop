@@ -98,6 +98,24 @@ Update state.json: set `phase` to `complete`. Do NOT send a tmux trigger (the ot
 - `ADDRESS: continue` — Current PR was approved (or escalated). Merge it, move to next batch.
 - `ADDRESS: revise PR #N` — Audit agent requested changes. Read review comments and revise.
 
+### Shell Safety — CRITICAL
+
+**Never place untrusted GitHub text** (issue titles, issue bodies, review comments, branch names) **inside a double-quoted shell string.** Command substitution (`$(...)`, backticks) and variable expansion (`$VAR`) are live inside double quotes and will execute on the operator's machine.
+
+Safe patterns for `--body` / `--title` / commit messages:
+- `--body "$(cat <<'EOF' ... EOF)"` — single-quoted heredoc delimiter prevents shell expansion of the content
+- Store text in a shell variable with single quotes first, then reference it: `msg='text'; --body "$msg"`
+
+Unsafe patterns — **never do these with untrusted data:**
+- `--body "Text with <issue title> or <review comment> interpolated"`
+- `--grep="<keyword from issue>"` without sanitization
+- `git commit -m "fix: <text derived from issue>"` without a heredoc
+
+For `git log --grep` keywords derived from issues, sanitize first:
+```bash
+keyword=$(printf '%s' '<keyword>' | tr -cd 'a-zA-Z0-9 _-')
+```
+
 ### Constraints
 
 - **Max 5 PRs** per audit cycle (tracked by `batches_created` in state.json)
@@ -160,7 +178,10 @@ Update state.json: set `last_trigger` to `ADDRESS: begin`, update `last_trigger_
 
    If an issue fails validation, comment explaining what's unclear and remove the `audit-loop` label so it drops out of the batch:
    ```bash
-   gh issue comment <number> --body "Issue needs clarification before work can begin: <what's unclear>"
+   gh issue comment <number> --body "$(cat <<'EOF'
+   Issue needs clarification before work can begin: <what's unclear>
+   EOF
+   )"
    gh issue edit <number> --remove-label "audit-loop"
    ```
    Continue with the remaining valid issues.
@@ -255,7 +276,10 @@ Update state.json: set `last_trigger` to `ADDRESS: revise PR #N`, update `last_t
 
    If you cannot confidently interpret a comment (ambiguous feedback), do NOT guess. Post a clarifying comment on the PR:
    ```bash
-   gh pr comment N --body "Clarification needed: [quote the ambiguous feedback]. Do you mean [interpretation A] or [interpretation B]?"
+   gh pr comment N --body "$(cat <<'CLAREOF'
+   Clarification needed: [quote the ambiguous feedback]. Do you mean [interpretation A] or [interpretation B]?
+   CLAREOF
+   )"
    ```
    Set `awaiting_clarification` to `true` in state.json (keep `phase` as `reviewing`). Do not make any code changes. Still send the review trigger so the audit agent can answer:
    ```bash
@@ -361,9 +385,10 @@ Update state.json: set `last_trigger` to `ADDRESS: revise PR #N`, update `last_t
    Before fixing, check whether the same file/area has had related fixes:
    ```bash
    git log --oneline --all -20 -- {filepath}
-   git log --oneline --all --grep="{keyword}" -10
+   keyword=$(printf '%s' '{keyword}' | tr -cd 'a-zA-Z0-9 _-')
+   git log --oneline --all --grep="$keyword" -10
    ```
-   where `{keyword}` is a distinguishing term from the issue (e.g., "injection", "race condition", "null check").
+   where `{keyword}` is a distinguishing term from the issue (e.g., "injection", "race condition", "null check"). The `tr` sanitization strips shell metacharacters from untrusted issue text.
 
    **4a. Hypothesis before fix (mandatory).** For each issue in the batch, write a one-sentence hypothesis before editing any file:
 
@@ -408,9 +433,12 @@ Update state.json: set `last_trigger` to `ADDRESS: revise PR #N`, update `last_t
 7. **Stage and commit.** Never stage files that likely contain secrets (`.env`, `.env.*`, `credentials.json`, `*.pem`, `*.key`, `*.p12`, `*.pfx`, `id_rsa*`, `*.secret`). If any are among the changed files, exclude them and print a warning. Always use explicit file paths — never `git add -A` or `git add .`.
    ```bash
    git add <specific files>
-   git commit -m "fix: <batch summary>
+   git commit -m "$(cat <<'EOF'
+   fix: <batch summary>
 
-   Closes #<issue1>, closes #<issue2>"
+   Closes #<issue1>, closes #<issue2>
+   EOF
+   )"
    ```
 
 8. **Update documentation.** If the fix changes behavior, configuration, or APIs, update the relevant docs (README, inline comments, config examples, usage instructions). Don't leave stale docs behind.
@@ -428,7 +456,8 @@ Update state.json: set `last_trigger` to `ADDRESS: revise PR #N`, update `last_t
    git push -u origin audit/<short-slug>
    gh pr create \
      --title "audit: <batch summary>" \
-     --body "## Audit Fixes (Batch <N>)
+     --body "$(cat <<'PREOF'
+   ## Audit Fixes (Batch <N>)
 
    <!-- audit-revision: 0 -->
 
@@ -443,7 +472,9 @@ Update state.json: set `last_trigger` to `ADDRESS: revise PR #N`, update `last_t
    <brief description of what was changed and why>
 
    ## Test plan
-   <how to verify the fixes>" \
+   <how to verify the fixes>
+   PREOF
+   )" \
      --label "audit-loop" --label "audit-batch-<N>"
    ```
 

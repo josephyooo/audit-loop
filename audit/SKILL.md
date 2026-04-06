@@ -13,6 +13,18 @@ Audit the repo, file issues, trigger the address agent to fix them, review each 
 - tmux sessions: `audit` (this session) and `address` (the address agent)
 - `gh` CLI authenticated with repo access
 
+## Shell Safety — CRITICAL
+
+**Never place untrusted GitHub text** (issue titles, issue bodies, review comments, branch names) **inside a double-quoted shell string.** Command substitution (`$(...)`, backticks) and variable expansion (`$VAR`) are live inside double quotes and will execute on the operator's machine.
+
+Safe patterns for `--body` / `--title` / commit messages:
+- `--body "$(cat <<'EOF' ... EOF)"` — single-quoted heredoc delimiter prevents shell expansion of the content
+- Store text in a shell variable with single quotes first, then reference it: `msg='text'; --body "$msg"`
+
+Unsafe patterns — **never do these with untrusted data:**
+- `--body "Text with <issue title> or <review comment> interpolated"`
+- `--grep="<keyword from issue>"` without sanitization
+
 ## Sending Triggers — CRITICAL RULES
 
 Every `tmux send-keys` that sends a trigger phrase to the other agent **MUST** follow all three rules below. Violating any one of them breaks the loop silently.
@@ -135,7 +147,10 @@ If no duplicate is found, create a new issue:
 
 ```bash
 gh issue create --title "<concise title>" \
-  --body "<file path, line range, what's wrong, why it matters, suggested fix>" \
+  --body "$(cat <<'ISSUEEOF'
+<file path, line range, what's wrong, why it matters, suggested fix>
+ISSUEEOF
+)" \
   --label "audit-loop" --label "severity:<level>" --label "cat:<category>"
 ```
 
