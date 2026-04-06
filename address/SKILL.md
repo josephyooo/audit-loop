@@ -100,21 +100,27 @@ Update state.json: set `phase` to `complete`. Do NOT send a tmux trigger (the ot
 
 ### Shell Safety — CRITICAL
 
-**Never place untrusted GitHub text** (issue titles, issue bodies, review comments, branch names) **inside a double-quoted shell string.** Command substitution (`$(...)`, backticks) and variable expansion (`$VAR`) are live inside double quotes and will execute on the operator's machine.
+**Never place untrusted GitHub text** (issue titles, issue bodies, review comments, branch names) **inside any shell-interpreted string — double-quoted or single-quoted.** Double quotes expand `$(...)` and `$VAR`; single quotes break on embedded apostrophes. Both allow shell execution from crafted input.
 
-Safe patterns for `--body` / `--title` / commit messages:
-- `--body "$(cat <<'EOF' ... EOF)"` — single-quoted heredoc delimiter prevents shell expansion of the content
-- Store text in a shell variable with single quotes first, then reference it: `msg='text'; --body "$msg"`
+The only safe transport for untrusted text is a **single-quoted heredoc** (`<<'EOF'`), which passes content to a command's stdin without any shell interpretation:
+```bash
+# Safe: load untrusted text into a variable via heredoc, then sanitize
+var=$(cat <<'EOF' | tr -cd 'a-zA-Z0-9 _-'
+<untrusted text goes here>
+EOF
+)
+# Safe: pass untrusted text as a command body via heredoc
+gh pr comment N --body "$(cat <<'EOF'
+<untrusted text goes here>
+EOF
+)"
+```
 
 Unsafe patterns — **never do these with untrusted data:**
-- `--body "Text with <issue title> or <review comment> interpolated"`
-- `--grep="<keyword from issue>"` without sanitization
+- `--body "Text with <issue title> interpolated"` — double-quote injection
+- `--body '$msg'` where `msg` was built by pasting text into quotes — single-quote breakout
+- `--grep="<keyword from issue>"` without heredoc-based sanitization
 - `git commit -m "fix: <text derived from issue>"` without a heredoc
-
-For `git log --grep` keywords derived from issues, sanitize first:
-```bash
-keyword=$(printf '%s' '<keyword>' | tr -cd 'a-zA-Z0-9 _-')
-```
 
 ### Constraints
 
@@ -367,7 +373,10 @@ Update state.json: set `last_trigger` to `ADDRESS: revise PR #N`, update `last_t
 2. Create a branch. Sanitize the slug so it is a valid, safe git ref name:
    ```bash
    git checkout <default-branch> && git pull
-   slug=$(printf '%s' '<short-slug>' | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9-' '-' | head -c 60 | sed 's/^-//;s/-$//')
+   slug=$(cat <<'EOF' | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9-' '-' | head -c 60 | sed 's/^-//;s/-$//'
+   <short-slug>
+   EOF
+   )
    git checkout -b "audit/$slug"
    ```
 
@@ -386,7 +395,10 @@ Update state.json: set `last_trigger` to `ADDRESS: revise PR #N`, update `last_t
    Before fixing, check whether the same file/area has had related fixes:
    ```bash
    git log --oneline --all -20 -- {filepath}
-   keyword=$(printf '%s' '{keyword}' | tr -cd 'a-zA-Z0-9 _-')
+   keyword=$(cat <<'EOF' | tr -cd 'a-zA-Z0-9 _-'
+   {keyword}
+   EOF
+   )
    git log --oneline --all --grep="$keyword" -10
    ```
    where `{keyword}` is a distinguishing term from the issue (e.g., "injection", "race condition", "null check"). The `tr` sanitization strips shell metacharacters from untrusted issue text.
@@ -455,7 +467,10 @@ Update state.json: set `last_trigger` to `ADDRESS: revise PR #N`, update `last_t
 10. Push and create PR. Sanitize the title to strip shell metacharacters:
    ```bash
    git push -u origin "audit/$slug"
-   pr_title=$(printf 'audit: %s' '<batch summary>' | tr -d '`$"' | head -c 70)
+   pr_title=$(cat <<'EOF' | tr -d '`$"'\''' | head -c 70
+   audit: <batch summary>
+   EOF
+   )
    gh pr create \
      --title "$pr_title" \
      --body "$(cat <<'PREOF'

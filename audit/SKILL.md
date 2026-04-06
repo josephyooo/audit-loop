@@ -15,15 +15,26 @@ Audit the repo, file issues, trigger the address agent to fix them, review each 
 
 ## Shell Safety — CRITICAL
 
-**Never place untrusted GitHub text** (issue titles, issue bodies, review comments, branch names) **inside a double-quoted shell string.** Command substitution (`$(...)`, backticks) and variable expansion (`$VAR`) are live inside double quotes and will execute on the operator's machine.
+**Never place untrusted GitHub text** (issue titles, issue bodies, review comments, branch names) **inside any shell-interpreted string — double-quoted or single-quoted.** Double quotes expand `$(...)` and `$VAR`; single quotes break on embedded apostrophes. Both allow shell execution from crafted input.
 
-Safe patterns for `--body` / `--title` / commit messages:
-- `--body "$(cat <<'EOF' ... EOF)"` — single-quoted heredoc delimiter prevents shell expansion of the content
-- Store text in a shell variable with single quotes first, then reference it: `msg='text'; --body "$msg"`
+The only safe transport for untrusted text is a **single-quoted heredoc** (`<<'EOF'`), which passes content to a command's stdin without any shell interpretation:
+```bash
+# Safe: load untrusted text into a variable via heredoc, then sanitize
+var=$(cat <<'EOF' | tr -cd 'a-zA-Z0-9 _-'
+<untrusted text goes here>
+EOF
+)
+# Safe: pass untrusted text as a command body via heredoc
+gh pr comment N --body "$(cat <<'EOF'
+<untrusted text goes here>
+EOF
+)"
+```
 
 Unsafe patterns — **never do these with untrusted data:**
-- `--body "Text with <issue title> or <review comment> interpolated"`
-- `--grep="<keyword from issue>"` without sanitization
+- `--body "Text with <issue title> interpolated"` — double-quote injection
+- `--body '$msg'` where `msg` was built by pasting text into quotes — single-quote breakout
+- `--grep="<keyword from issue>"` without heredoc-based sanitization
 
 ## Sending Triggers — CRITICAL RULES
 
