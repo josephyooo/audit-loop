@@ -202,6 +202,8 @@ Update state.json: set `phase` to `reviewing`, `current_pr` to N, update `last_t
 
 7. Decision:
 
+   **CRITICAL: All review feedback MUST be posted as a GitHub PR review using `gh pr review`. NEVER just say your findings in chat — the address agent cannot see your chat output, only GitHub comments. If you skip the `gh pr review` command, the address agent receives a trigger with no actionable feedback and the loop breaks.**
+
    **If the fixes are correct and tests pass — approve with a detailed comment** explaining what you verified. Don't just say "Fixes verified." — describe what you checked:
    ```bash
    gh pr review N --approve --body "## Verification

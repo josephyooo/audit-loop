@@ -62,6 +62,10 @@ In the `audit` session, run `/audit`. Everything else is automatic.
 /address  (then paste findings)
 ```
 
+### Feature mode
+
+You can also use the address agent to implement new features. Open GitHub issues labeled `audit-loop` describing the work, then run `ADDRESS: begin` in the address session. The audit agent reviews each PR as a quality gate.
+
 ## Trigger Protocol
 
 Audit -> Address (telling the address agent to fix):
