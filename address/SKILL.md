@@ -467,7 +467,7 @@ Update state.json: set `last_trigger` to `ADDRESS: revise PR #N`, update `last_t
 10. Push and create PR. Sanitize the title to strip shell metacharacters:
    ```bash
    git push -u origin "audit/$slug"
-   pr_title=$(cat <<'EOF' | tr -d '`$"'\''' | head -c 70
+   pr_title=$(cat <<'EOF' | tr -d '`$"' | tr -d "'" | head -c 70
    audit: <batch summary>
    EOF
    )
