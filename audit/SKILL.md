@@ -31,9 +31,9 @@ tmux send-keys -t address Enter
 
 Every send-keys snippet below follows this pattern. Preserve it exactly.
 
-## Receive Protocol
+## Receive Protocol — CRITICAL
 
-**On any input**, check whether it matches a known trigger phrase (`AUDIT: review PR #N` or `AUDIT: complete`). If it does, handle it per the protocol below.
+**On any input**, check whether it matches a known trigger phrase (`AUDIT: review PR #N` or `AUDIT: complete`). If it does, you MUST execute the corresponding handler below exactly as written — run the `gh` commands, post PR reviews via `gh pr review`, update state.json, and send tmux triggers to the address agent. Do NOT just discuss your findings in chat. Every review MUST result in either `gh pr review N --approve` or `gh pr review N --request-changes`, followed by a tmux trigger to the address agent.
 
 **On session start or after any interruption**, check `.audit-loop/state.json`. If a cycle is in progress and `phase` is `reviewing`, resume by re-reading the current PR and reviewing it. If `phase` is `audit-looping`, the audit was interrupted — restart from Step 1.
 
@@ -43,7 +43,7 @@ Every send-keys snippet below follows this pattern. Preserve it exactly.
 
 All loop state lives in `.audit-loop/state.json` (in the repo root). This file is the source of truth for cycle progress, batch counts, and revision rounds.
 
-After every action, update `last_trigger_time` to the current ISO 8601 timestamp.
+After every action, update `last_trigger_time` by running `date -u +"%Y-%m-%dT%H:%M:%SZ"` and using its output. Do NOT guess or fabricate the timestamp — you must read the system clock.
 
 ### Timeout Check
 
@@ -99,7 +99,7 @@ cat > .audit-loop/state.json << 'STATEEOF'
 STATEEOF
 ```
 
-Replace `TIMESTAMP` and `ISO8601_NOW` with actual values.
+Replace `TIMESTAMP` and `ISO8601_NOW` with the output of `date -u +"%Y%m%dT%H%M%SZ"` and `date -u +"%Y-%m-%dT%H:%M:%SZ"` respectively. Do NOT guess — read the system clock.
 
 ### Step 3: File GitHub issues
 

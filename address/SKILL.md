@@ -42,9 +42,9 @@ tmux send-keys -t audit Enter
 
 Every send-keys snippet below follows this pattern. Preserve it exactly.
 
-### Receive Protocol
+### Receive Protocol — CRITICAL
 
-**On any input**, check whether it matches a known trigger phrase (`ADDRESS: begin`, `ADDRESS: continue`, `ADDRESS: revise PR #N`). If it does, handle it per the protocol below.
+**On any input**, check whether it matches a known trigger phrase (`ADDRESS: begin`, `ADDRESS: continue`, `ADDRESS: revise PR #N`). If it does, you MUST execute the corresponding handler below exactly as written — run the `gh` commands, create branches, commit code, open PRs, update state.json, and send tmux triggers to the audit agent. Do NOT just discuss your plan in chat. Every handler MUST end with a tmux trigger to the audit agent.
 
 **On session start or after any interruption**, check `.audit-loop/state.json`. If a cycle is in progress and `phase` is `address-fixing`, resume:
 - If `current_pr` is set, check whether that PR has been reviewed. If not, re-send `AUDIT: review PR #N` to the audit agent. If it has reviews, process the latest review as if receiving the appropriate trigger.
@@ -56,7 +56,7 @@ Every send-keys snippet below follows this pattern. Preserve it exactly.
 
 All loop state lives in `.audit-loop/state.json` (in the repo root, created by the `/audit` skill). This file is the source of truth for cycle progress, batch counts, and revision rounds.
 
-After every action, update `last_trigger_time` to the current ISO 8601 timestamp.
+After every action, update `last_trigger_time` by running `date -u +"%Y-%m-%dT%H:%M:%SZ"` and using its output. Do NOT guess or fabricate the timestamp — you must read the system clock.
 
 ### Additional State Fields
 
