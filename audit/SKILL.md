@@ -13,6 +13,29 @@ Audit the repo, file issues, trigger the address agent to fix them, review each 
 - tmux sessions: `audit` (this session) and `address` (the address agent)
 - `gh` CLI authenticated with repo access
 
+## Shell Safety — CRITICAL
+
+**Never place untrusted GitHub text** (issue titles, issue bodies, review comments, branch names) **inside any shell-interpreted string — double-quoted or single-quoted.** Double quotes expand `$(...)` and `$VAR`; single quotes break on embedded apostrophes. Both allow shell execution from crafted input.
+
+The only safe transport for untrusted text is a **single-quoted heredoc** (`<<'EOF'`), which passes content to a command's stdin without any shell interpretation:
+```bash
+# Safe: load untrusted text into a variable via heredoc, then sanitize
+var=$(cat <<'EOF' | tr -cd 'a-zA-Z0-9 _-'
+<untrusted text goes here>
+EOF
+)
+# Safe: pass untrusted text as a command body via heredoc
+gh pr comment N --body "$(cat <<'EOF'
+<untrusted text goes here>
+EOF
+)"
+```
+
+Unsafe patterns — **never do these with untrusted data:**
+- `--body "Text with <issue title> interpolated"` — double-quote injection
+- `--body '$msg'` where `msg` was built by pasting text into quotes — single-quote breakout
+- `--grep="<keyword from issue>"` without heredoc-based sanitization
+
 ## Sending Triggers — CRITICAL RULES
 
 Every `tmux send-keys` that sends a trigger phrase to the other agent **MUST** follow all three rules below. Violating any one of them breaks the loop silently.
@@ -135,7 +158,10 @@ If no duplicate is found, create a new issue:
 
 ```bash
 gh issue create --title "<concise title>" \
-  --body "<file path, line range, what's wrong, why it matters, suggested fix>" \
+  --body "$(cat <<'ISSUEEOF'
+<file path, line range, what's wrong, why it matters, suggested fix>
+ISSUEEOF
+)" \
   --label "audit-loop" --label "severity:<level>" --label "cat:<category>"
 ```
 

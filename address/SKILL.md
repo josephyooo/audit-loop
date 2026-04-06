@@ -98,6 +98,30 @@ Update state.json: set `phase` to `complete`. Do NOT send a tmux trigger (the ot
 - `ADDRESS: continue` — Current PR was approved (or escalated). Merge it, move to next batch.
 - `ADDRESS: revise PR #N` — Audit agent requested changes. Read review comments and revise.
 
+### Shell Safety — CRITICAL
+
+**Never place untrusted GitHub text** (issue titles, issue bodies, review comments, branch names) **inside any shell-interpreted string — double-quoted or single-quoted.** Double quotes expand `$(...)` and `$VAR`; single quotes break on embedded apostrophes. Both allow shell execution from crafted input.
+
+The only safe transport for untrusted text is a **single-quoted heredoc** (`<<'EOF'`), which passes content to a command's stdin without any shell interpretation:
+```bash
+# Safe: load untrusted text into a variable via heredoc, then sanitize
+var=$(cat <<'EOF' | tr -cd 'a-zA-Z0-9 _-'
+<untrusted text goes here>
+EOF
+)
+# Safe: pass untrusted text as a command body via heredoc
+gh pr comment N --body "$(cat <<'EOF'
+<untrusted text goes here>
+EOF
+)"
+```
+
+Unsafe patterns — **never do these with untrusted data:**
+- `--body "Text with <issue title> interpolated"` — double-quote injection
+- `--body '$msg'` where `msg` was built by pasting text into quotes — single-quote breakout
+- `--grep="<keyword from issue>"` without heredoc-based sanitization
+- `git commit -m "fix: <text derived from issue>"` without a heredoc
+
 ### Constraints
 
 - **Max 5 PRs** per audit cycle (tracked by `batches_created` in state.json)
@@ -160,7 +184,10 @@ Update state.json: set `last_trigger` to `ADDRESS: begin`, update `last_trigger_
 
    If an issue fails validation, comment explaining what's unclear and remove the `audit-loop` label so it drops out of the batch:
    ```bash
-   gh issue comment <number> --body "Issue needs clarification before work can begin: <what's unclear>"
+   gh issue comment <number> --body "$(cat <<'EOF'
+   Issue needs clarification before work can begin: <what's unclear>
+   EOF
+   )"
    gh issue edit <number> --remove-label "audit-loop"
    ```
    Continue with the remaining valid issues.
@@ -255,7 +282,10 @@ Update state.json: set `last_trigger` to `ADDRESS: revise PR #N`, update `last_t
 
    If you cannot confidently interpret a comment (ambiguous feedback), do NOT guess. Post a clarifying comment on the PR:
    ```bash
-   gh pr comment N --body "Clarification needed: [quote the ambiguous feedback]. Do you mean [interpretation A] or [interpretation B]?"
+   gh pr comment N --body "$(cat <<'CLAREOF'
+   Clarification needed: [quote the ambiguous feedback]. Do you mean [interpretation A] or [interpretation B]?
+   CLAREOF
+   )"
    ```
    Set `awaiting_clarification` to `true` in state.json (keep `phase` as `reviewing`). Do not make any code changes. Still send the review trigger so the audit agent can answer:
    ```bash
@@ -340,10 +370,14 @@ Update state.json: set `last_trigger` to `ADDRESS: revise PR #N`, update `last_t
 
 1. Read `batches_created` from state.json, increment by 1. This is the batch number.
 
-2. Create a branch:
+2. Create a branch. Sanitize the slug so it is a valid, safe git ref name:
    ```bash
    git checkout <default-branch> && git pull
-   git checkout -b audit/<short-slug>
+   slug=$(cat <<'EOF' | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9-' '-' | head -c 60 | sed 's/^-//;s/-$//'
+   <short-slug>
+   EOF
+   )
+   git checkout -b "audit/$slug"
    ```
 
 3. Create the batch label if needed:
@@ -361,9 +395,13 @@ Update state.json: set `last_trigger` to `ADDRESS: revise PR #N`, update `last_t
    Before fixing, check whether the same file/area has had related fixes:
    ```bash
    git log --oneline --all -20 -- {filepath}
-   git log --oneline --all --grep="{keyword}" -10
+   keyword=$(cat <<'EOF' | tr -cd 'a-zA-Z0-9 _-'
+   {keyword}
+   EOF
+   )
+   git log --oneline --all --grep="$keyword" -10
    ```
-   where `{keyword}` is a distinguishing term from the issue (e.g., "injection", "race condition", "null check").
+   where `{keyword}` is a distinguishing term from the issue (e.g., "injection", "race condition", "null check"). The `tr` sanitization strips shell metacharacters from untrusted issue text.
 
    **4a. Hypothesis before fix (mandatory).** For each issue in the batch, write a one-sentence hypothesis before editing any file:
 
@@ -408,9 +446,12 @@ Update state.json: set `last_trigger` to `ADDRESS: revise PR #N`, update `last_t
 7. **Stage and commit.** Never stage files that likely contain secrets (`.env`, `.env.*`, `credentials.json`, `*.pem`, `*.key`, `*.p12`, `*.pfx`, `id_rsa*`, `*.secret`). If any are among the changed files, exclude them and print a warning. Always use explicit file paths — never `git add -A` or `git add .`.
    ```bash
    git add <specific files>
-   git commit -m "fix: <batch summary>
+   git commit -m "$(cat <<'EOF'
+   fix: <batch summary>
 
-   Closes #<issue1>, closes #<issue2>"
+   Closes #<issue1>, closes #<issue2>
+   EOF
+   )"
    ```
 
 8. **Update documentation.** If the fix changes behavior, configuration, or APIs, update the relevant docs (README, inline comments, config examples, usage instructions). Don't leave stale docs behind.
@@ -423,12 +464,17 @@ Update state.json: set `last_trigger` to `ADDRESS: revise PR #N`, update `last_t
 
    If the diff contains out-of-scope changes, revert them with `git checkout HEAD~1 -- <file>` and amend the commit.
 
-10. Push and create PR:
+10. Push and create PR. Sanitize the title to strip shell metacharacters:
    ```bash
-   git push -u origin audit/<short-slug>
+   git push -u origin "audit/$slug"
+   pr_title=$(cat <<'EOF' | tr -d '`$"' | tr -d "'" | head -c 70
+   audit: <batch summary>
+   EOF
+   )
    gh pr create \
-     --title "audit: <batch summary>" \
-     --body "## Audit Fixes (Batch <N>)
+     --title "$pr_title" \
+     --body "$(cat <<'PREOF'
+   ## Audit Fixes (Batch <N>)
 
    <!-- audit-revision: 0 -->
 
@@ -443,7 +489,9 @@ Update state.json: set `last_trigger` to `ADDRESS: revise PR #N`, update `last_t
    <brief description of what was changed and why>
 
    ## Test plan
-   <how to verify the fixes>" \
+   <how to verify the fixes>
+   PREOF
+   )" \
      --label "audit-loop" --label "audit-batch-<N>"
    ```
 
