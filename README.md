@@ -10,6 +10,7 @@ Agent-agnostic skills that orchestrate an automated audit-fix loop between any t
 |---|---|---|---|
 | `/audit` | Auditor | `audit/SKILL.md` | Audit the repo, open issues, review the address agent's PRs |
 | `/address` | Fixer | `address/SKILL.md` | Fix issues in batched PRs, handle review feedback |
+| `/issues` | Planner | `issues/SKILL.md` | Create GitHub issues from a plan for the address agent to pick up |
 
 Works with any agent that supports the Agent Skills standard (Claude Code, Codex CLI, Copilot CLI, Gemini CLI, etc.).
 
@@ -20,10 +21,12 @@ Symlink into whichever agent skill directories you use:
 # Any agent that reads ~/.agents/skills/ (Codex CLI, Copilot CLI)
 ln -s /path/to/audit-loop/audit ~/.agents/skills/audit
 ln -s /path/to/audit-loop/address ~/.agents/skills/address
+ln -s /path/to/audit-loop/issues ~/.agents/skills/issues
 
 # Claude Code specifically
 ln -s /path/to/audit-loop/address ~/.claude/skills/address
 ln -s /path/to/audit-loop/audit ~/.claude/skills/audit
+ln -s /path/to/audit-loop/issues ~/.claude/skills/issues
 ```
 
 ### tmux sessions
@@ -64,7 +67,7 @@ In the `audit` session, run `/audit`. Everything else is automatic.
 
 ### Feature mode
 
-You can also use the address agent to implement new features. Open GitHub issues labeled `audit-loop` describing the work, then run `ADDRESS: begin` in the address session. The audit agent reviews each PR as a quality gate.
+You can also use the loop to implement new features. Plan the feature (e.g. using plan mode), then run `/issues` to create `audit-loop`-labeled issues from the plan. Start the address agent with `ADDRESS: begin` — the audit agent reviews each PR as a quality gate.
 
 ## Trigger Protocol
 
