@@ -273,11 +273,12 @@ tmux send-keys -t address Enter
 
    Read `revision_round` from state.json. Do NOT increment it — the address agent owns that counter and increments on push.
 
-   **Convergence check (after 2nd revision, before requesting the 3rd):** If `revision_round` >= 2, check for convergence before requesting another round. Read `revision_history` from state.json and get the previous revision's commit SHA. Compare:
+   **Convergence check (after 2nd revision, before requesting the 3rd):** If `revision_round` >= 2, check for convergence before requesting another round. Read `revision_history` from state.json and get the previous revision's commit SHA. Compare using the PR tip commit (not local `HEAD`, which may not be the PR branch):
    ```bash
    base=$(gh pr view N --json commits --jq '.commits[0].oid')
+   tip=$(gh pr view N --json commits --jq '.commits[-1].oid')
    prev_commit=<from revision_history[-1].commit>
-   curr_diff=$(git diff $prev_commit..HEAD | wc -l)
+   curr_diff=$(git diff $prev_commit..$tip | wc -l)
    prev_diff=$(git diff $base..$prev_commit | wc -l)
    ```
    If `curr_diff` < 30% of `prev_diff`, the revisions are cancelling each other out. Do NOT request another revision:

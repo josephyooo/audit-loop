@@ -233,9 +233,11 @@ Update state.json: set `last_trigger` to `ADDRESS: continue`, `revision_round` t
    ```
    Then retry merge. If still failing, label `needs-human` and move on.
 
-2. Close the issues fixed by this PR (if using `Closes #N` in commit, they auto-close on merge — verify):
+2. Explicitly close the issues listed in the PR body (do not rely on auto-close from commit messages — squash merges may not propagate closing keywords):
    ```bash
-   gh issue close <number> --reason completed
+   for issue in $(gh pr view <number> --json body -q '.body' | grep -oiE 'closes?\s+#[0-9]+' | grep -oE '[0-9]+'); do
+     gh issue close "$issue" --reason completed
+   done
    ```
 
 3. Check the batch cap — read `batches_created` from state.json. If >= 5, signal completion.
@@ -478,9 +480,8 @@ Update state.json: set `last_trigger` to `ADDRESS: revise PR #N`, update `last_t
 
    <!-- audit-revision: 0 -->
 
-   Addresses:
-   - #<issue1>: <title>
-   - #<issue2>: <title>
+   Closes #<issue1>: <title>
+   Closes #<issue2>: <title>
 
    ## Root Cause Analysis
    <copy the hypotheses from .audit-loop/batch-N-hypotheses.md here — root cause, fix, risk for each issue>
