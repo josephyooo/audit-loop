@@ -1,11 +1,15 @@
 ---
 name: audit
-description: "Audit the current repo, open GitHub issues for findings, then orchestrate the address agent to fix them in batched PRs via tmux. Reviews each PR the address agent opens and iterates until clean. Requires an address agent in a tmux session named 'address'."
+description: "Audit the current repo or review a specific PR, then orchestrate the address agent to fix findings via tmux. Requires an address agent in a tmux session named 'address'."
+argument-hint: "[PR number]"
 ---
 
 # Audit & Review Loop
 
-Audit the repo, file issues, trigger the address agent to fix them, review each PR, and do a final sweep.
+Two modes:
+
+- **Repo mode** (no argument): Audit the entire repo, file issues, trigger the address agent to fix them, review each PR, and do a final sweep.
+- **PR mode** (`/audit 42` or `/audit #42`): Review a specific PR's diff, then iterate with the address agent until the PR is clean.
 
 ## Prerequisites
 
@@ -83,7 +87,49 @@ Print: "WARNING: {elapsed} since last activity. Other agent may be stalled. Labe
 
 Set `phase` to `complete` in state.json and stop.
 
-## Protocol
+## Mode Detection
+
+- If the argument is a PR number (e.g. `42`, `#42`, `PR #42`) → **PR mode** (see below)
+- Otherwise → **Repo mode** (see "Repo Protocol")
+
+---
+
+## PR Mode
+
+Review a specific PR and iterate with the address agent until it's clean. Skips repo audit, issue filing, and batching entirely.
+
+### PR Mode Steps
+
+1. Parse the PR number from the argument.
+
+2. Initialize state (same as Repo mode Step 2 — create `.audit-loop/`, write state.json), but set:
+   ```json
+   {
+     "cycle_id": "TIMESTAMP",
+     "phase": "reviewing",
+     "current_pr": N,
+     "current_batch": 1,
+     "revision_round": 0,
+     "batches_created": 1,
+     "last_trigger": "pr-review",
+     "last_trigger_time": "ISO8601_NOW",
+     "awaiting_clarification": false,
+     "revision_history": []
+   }
+   ```
+   Replace `TIMESTAMP` and `ISO8601_NOW` with the output of `date -u +"%Y%m%dT%H%M%SZ"` and `date -u +"%Y-%m-%dT%H:%M:%SZ"` respectively. Do NOT guess — read the system clock.
+
+3. Ensure labels exist (same as Repo mode Step 3 label setup).
+
+4. Jump directly to the **"On AUDIT: review PR #N"** handler in Step 5 below, using the PR number from the argument. Follow it exactly — post `gh pr review`, send tmux triggers, etc.
+
+   **Important:** The first trigger sent to the address agent in PR mode MUST use the `/address` prefix to load the skill (e.g. `/address ADDRESS: revise PR #N ` or `/address ADDRESS: continue `). Subsequent triggers use bare `ADDRESS:` phrases.
+
+5. When the address agent sends `AUDIT: complete` (or the PR is approved and merged), run the final sweep (Step 6) but skip the critiqued-issue revision (there are no audit-filed issues in PR mode).
+
+---
+
+## Repo Protocol
 
 ### Step 1: Audit the repo
 

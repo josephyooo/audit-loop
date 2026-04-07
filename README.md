@@ -8,7 +8,7 @@ Agent-agnostic skills that orchestrate an automated audit-fix loop between any t
 
 | Skill | Role | Location | Purpose |
 |---|---|---|---|
-| `/audit` | Auditor | `audit/SKILL.md` | Audit the repo, open issues, review the address agent's PRs |
+| `/audit` | Auditor | `audit/SKILL.md` | Audit the repo or review a specific PR, then iterate with the address agent |
 | `/address` | Fixer | `address/SKILL.md` | Fix issues in batched PRs, handle review feedback |
 | `/issues` | Planner | `issues/SKILL.md` | Create GitHub issues from a plan for the address agent to pick up |
 
@@ -43,9 +43,10 @@ Ensure `gh` CLI is authenticated with repo access.
 
 ## Usage
 
-In the `audit` session, run `/audit`. Everything else is automatic.
+- **Repo mode:** In the `audit` session, run `/audit`. Everything else is automatic.
+- **PR mode:** Run `/audit #42` to review a specific PR and iterate with the address agent until it's clean.
 
-### What happens
+### Repo mode
 
 1. The audit agent audits the repo and opens GitHub issues (labeled `audit-loop` + severity + category)
 2. The audit agent sends `/address ADDRESS: begin` to the address agent via tmux
@@ -65,6 +66,10 @@ In the `audit` session, run `/audit`. Everything else is automatic.
 /address path/to/findings.md
 /address  (then paste findings)
 ```
+
+### PR mode
+
+Run `/audit #N` to review an existing PR. The audit agent reviews the diff, posts structured feedback, and triggers the address agent to push fixes to the same PR branch. Useful when another agent (or a human) has already opened a PR and you want the audit loop to refine it.
 
 ### Feature mode
 
