@@ -1,7 +1,7 @@
 ---
 name: audit
 description: "Audit the current repo or review a specific PR, then orchestrate the address agent to fix findings via tmux. Requires an address agent in a tmux session named 'address'."
-argument-hint: "[PR number]"
+argument-hint: "[PR number | topic]"
 ---
 
 # Audit & Review Loop
@@ -90,7 +90,8 @@ Set `phase` to `complete` in state.json and stop.
 ## Mode Detection
 
 - If the argument is a PR number (e.g. `42`, `#42`, `PR #42`) → **PR mode** (see below)
-- Otherwise → **Repo mode** (see "Repo Protocol")
+- If the argument is a non-numeric topic (e.g. `documentation`, `security`, `performance`) → **Repo mode, scoped to that topic**
+- No argument → **Repo mode, full audit**
 
 ---
 
@@ -133,7 +134,17 @@ Review a specific PR and iterate with the address agent until it's clean. Skips 
 
 ### Step 1: Audit the repo
 
-Analyze the entire codebase for substantive issues across these categories:
+**If a topic was provided**, audit thoroughly for that topic only. Interpret the topic broadly and be exhaustive within it. Examples:
+- `documentation` — stale/missing/inaccurate docs, undocumented public APIs, outdated examples, broken links, missing changelogs, misleading comments
+- `security` — injection, auth flaws, secrets, insecure defaults, CSRF, SSRF, path traversal
+- `performance` — unnecessary allocations, N+1 queries, missing indexes, blocking I/O, cache misses
+- `correctness` — logic errors, off-by-ones, race conditions, null handling, edge cases
+- `dependencies` — deprecated/vulnerable packages, version issues, unused deps
+- `tests` — missing coverage, flaky tests, untested edge cases, mock/stub misuse
+
+The topic does not need to match the examples above exactly — interpret the user's intent.
+
+**If no topic was provided**, analyze the entire codebase across all categories:
 - **security** — injection, auth flaws, secrets, insecure defaults
 - **correctness** — logic errors, off-by-ones, race conditions, null handling
 - **performance** — unnecessary allocations, N+1 queries, missing indexes

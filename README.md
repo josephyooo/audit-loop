@@ -44,6 +44,7 @@ Ensure `gh` CLI is authenticated with repo access.
 ## Usage
 
 - **Repo mode:** In the `audit` session, run `/audit`. Everything else is automatic.
+- **Topic mode:** Run `/audit documentation` (or `security`, `tests`, etc.) to audit only that topic.
 - **PR mode:** Run `/audit #42` to review a specific PR and iterate with the address agent until it's clean.
 
 ### Repo mode
