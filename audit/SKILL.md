@@ -74,9 +74,16 @@ All loop state lives in `.audit-loop/state.json` (in the repo root). This file i
 
 After every action, update `last_trigger_time` by running `date -u +"%Y-%m-%dT%H:%M:%SZ"` and using its output. Do NOT guess or fabricate the timestamp — you must read the system clock.
 
+### Additional State Fields
+
+In addition to the base fields above, the loop also tracks:
+
+- `last_heartbeat_time`: most recent in-flight heartbeat in UTC ISO8601 format. Initialize it to the same value as `last_trigger_time`.
+- `heartbeat_actor`: `audit` or `address`, whichever agent most recently refreshed `last_heartbeat_time`.
+
 ### Timeout Check
 
-On receiving any trigger, read `last_trigger_time` from state.json. If more than 30 minutes have elapsed:
+On receiving any trigger, read `last_heartbeat_time` from state.json. If it is missing, fall back to `last_trigger_time`. If more than 30 minutes have elapsed since that most recent liveness signal:
 
 ```bash
 # Label all open audit PRs as needs-human
@@ -88,6 +95,14 @@ done
 Print: "WARNING: {elapsed} since last activity. Other agent may be stalled. Labeled open PRs `needs-human` and stopping."
 
 Set `phase` to `complete` in state.json and stop.
+
+### Watchdog Requirement
+
+The 30-minute timeout must still fire when no new trigger arrives. Do not wait indefinitely:
+
+- While waiting for the address agent, re-run the timeout check against `.audit-loop/state.json` every 5 minutes until a new trigger arrives.
+- While doing long-running local work (repo audit, large diff review, tests, rebases), if 5 minutes pass without another state write, refresh `last_heartbeat_time` and `heartbeat_actor` in state.json before continuing.
+- Whenever you update state.json at the end of a handler, set `last_heartbeat_time` to that same timestamp and `heartbeat_actor` to `audit`.
 
 ## Mode Detection
 
@@ -105,7 +120,15 @@ Review a specific PR and iterate with the address agent until it's clean. Skips 
 
 1. Parse the PR number from the argument.
 
-2. Detect the address agent's harness (same as Repo mode Step 2) and initialize state (same as Repo mode Step 3 — create `.audit-loop/`, write state.json), but set:
+2. Validate GitHub auth before any `gh` command:
+   ```bash
+   if ! gh auth status >/dev/null 2>&1; then
+     echo "ERROR: GitHub authentication failed. Run 'gh auth login' and retry."
+     exit 1
+   fi
+   ```
+
+   Then detect the address agent's harness (same as Repo mode Step 2) and initialize state (same as Repo mode Step 3 — create `.audit-loop/`, write state.json), but set:
    ```json
    {
      "cycle_id": "TIMESTAMP",
@@ -116,6 +139,8 @@ Review a specific PR and iterate with the address agent until it's clean. Skips 
      "batches_created": 1,
      "last_trigger": "pr-review",
      "last_trigger_time": "ISO8601_NOW",
+     "last_heartbeat_time": "ISO8601_NOW",
+     "heartbeat_actor": "audit",
      "awaiting_clarification": false,
      "revision_history": [],
      "address_prefix": "/",
@@ -124,7 +149,7 @@ Review a specific PR and iterate with the address agent until it's clean. Skips 
      "audit_skill_loaded": true
    }
    ```
-   Replace `TIMESTAMP` and `ISO8601_NOW` with the output of `date -u +"%Y%m%dT%H%M%SZ"` and `date -u +"%Y-%m-%dT%H:%M:%SZ"` respectively. Replace the prefix values with detected prefixes. Set `audit_skill_loaded` to `true` (since `/audit` is already running). Do NOT guess — read the system clock.
+   Replace `TIMESTAMP` and `ISO8601_NOW` with the output of `date -u +"%Y%m%dT%H%M%SZ"` and `date -u +"%Y-%m-%dT%H:%M:%SZ"` respectively. Initialize `last_heartbeat_time` to the same `ISO8601_NOW` value and set `heartbeat_actor` to `audit`. Replace the prefix values with detected prefixes. Set `audit_skill_loaded` to `true` (since `/audit` is already running). Do NOT guess — read the system clock.
 
 3. Ensure labels exist (same as Repo mode Step 4 label setup).
 
@@ -159,7 +184,16 @@ The topic does not need to match the examples above exactly — interpret the us
 
 Skip trivial style nits unless they mask bugs.
 
-### Step 2: Detect agent harnesses
+### Step 2: Validate GitHub auth and detect agent harnesses
+
+Before any `gh` command in repo mode, fail fast if authentication is broken:
+
+```bash
+if ! gh auth status >/dev/null 2>&1; then
+  echo "ERROR: GitHub authentication failed. Run 'gh auth login' and retry."
+  exit 1
+fi
+```
 
 Before initializing state, detect what skill prefix each agent uses. For each tmux session, capture the last few lines and match:
 
@@ -199,6 +233,8 @@ cat > .audit-loop/state.json << 'STATEEOF'
   "batches_created": 0,
   "last_trigger": "audit-start",
   "last_trigger_time": "ISO8601_NOW",
+  "last_heartbeat_time": "ISO8601_NOW",
+  "heartbeat_actor": "audit",
   "awaiting_clarification": false,
   "revision_history": [],
   "address_prefix": "/",
@@ -209,7 +245,7 @@ cat > .audit-loop/state.json << 'STATEEOF'
 STATEEOF
 ```
 
-Replace `TIMESTAMP` and `ISO8601_NOW` with the output of `date -u +"%Y%m%dT%H%M%SZ"` and `date -u +"%Y-%m-%dT%H:%M:%SZ"` respectively. Replace the prefix values with detected prefixes from Step 2. Set `audit_skill_loaded` to `true` (since `/audit` is already running). Do NOT guess — read the system clock.
+Replace `TIMESTAMP` and `ISO8601_NOW` with the output of `date -u +"%Y%m%dT%H%M%SZ"` and `date -u +"%Y-%m-%dT%H:%M:%SZ"` respectively. Initialize `last_heartbeat_time` to the same `ISO8601_NOW` value and set `heartbeat_actor` to `audit`. Replace the prefix values with detected prefixes from Step 2. Set `audit_skill_loaded` to `true` (since `/audit` is already running). Do NOT guess — read the system clock.
 
 ### Step 4: File GitHub issues
 
@@ -370,9 +406,14 @@ tmux send-keys -t address Enter
    base=$(gh pr view N --json commits --jq '.commits[0].oid')
    tip=$(gh pr view N --json commits --jq '.commits[-1].oid')
    prev_commit=<from revision_history[-1].commit>
-   curr_diff=$(git diff $prev_commit..$tip | wc -l)
-   prev_diff=$(git diff $base..$prev_commit | wc -l)
+   if [ -z "$base" ] || [ -z "$tip" ] || [ -z "$prev_commit" ]; then
+     echo "WARNING: Could not resolve commit SHAs for convergence check — skipping"
+   else
+     curr_diff=$(git diff "$prev_commit".."$tip" | wc -l)
+     prev_diff=$(git diff "$base".."$prev_commit" | wc -l)
+   fi
    ```
+   Only apply the 30% convergence escalation when all three SHAs are present and both diff sizes were computed.
    If `curr_diff` < 30% of `prev_diff`, the revisions are cancelling each other out. Do NOT request another revision:
    ```bash
    gh pr review N --comment --body "Revisions are not converging — same lines toggling across revisions. Escalating to human review."

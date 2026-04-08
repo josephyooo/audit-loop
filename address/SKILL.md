@@ -64,6 +64,8 @@ After every action, update `last_trigger_time` by running `date -u +"%Y-%m-%dT%H
 
 Beyond the base fields (`cycle_id`, `phase`, `current_pr`, `current_batch`, `revision_round`, `batches_created`, `last_trigger`, `last_trigger_time`), state.json also tracks:
 
+- `last_heartbeat_time`: most recent in-flight heartbeat in UTC ISO8601 format. Initialize it to the same value as `last_trigger_time`.
+- `heartbeat_actor`: `audit` or `address`, whichever agent most recently refreshed `last_heartbeat_time`.
 - `awaiting_clarification`: boolean — `true` when the address agent posted a clarifying question and is blocked waiting for a response. Default `false`.
 - `revision_history`: array of `{round, pr, commit, summary}` entries — The address agent writes one after each revision push. The `commit` SHA enables the audit agent's convergence detection.
 - `address_prefix`: string — the skill prefix for the address agent's harness (`/` for Claude/Copilot/Gemini, `$` for Codex). Set by whichever agent initializes state.json.
@@ -75,7 +77,7 @@ Both skills read and write state.json. Always read-modify-write (don't overwrite
 
 ### Timeout Check
 
-On receiving any trigger, read `last_trigger_time` and `awaiting_clarification` from state.json.
+On receiving any trigger, read `last_heartbeat_time` from state.json. If it is missing, fall back to `last_trigger_time`. Also read `awaiting_clarification`.
 
 **If `awaiting_clarification` is true:**
 - If `last_trigger_time` < 2 hours ago: skip normal timeout. Print: "Cycle is blocked on clarification — waiting for response on PR #N."
@@ -97,6 +99,14 @@ done
 Print: "WARNING: {elapsed} since last activity. Other agent may be stalled. Labeled open PRs `needs-human` and stopping."
 
 Update state.json: set `phase` to `complete`. Do NOT send a tmux trigger (the other agent may be dead). Stop.
+
+### Watchdog Requirement
+
+The timeout must still fire if the audit agent never sends another trigger. Do not wait indefinitely:
+
+- While waiting for the audit agent, re-run the timeout check against `.audit-loop/state.json` every 5 minutes until a new trigger arrives.
+- While doing long-running local work (batch fixes, test runs, rebases), if 5 minutes pass without another state write, refresh `last_heartbeat_time` and `heartbeat_actor` in state.json before continuing.
+- Whenever you update state.json at the end of a handler, set `last_heartbeat_time` to that same timestamp and `heartbeat_actor` to `address`.
 
 ### Trigger phrases
 
@@ -166,6 +176,8 @@ If state.json does **not** exist (the address agent is starting the cycle), init
      "batches_created": 0,
      "last_trigger": "ADDRESS: begin",
      "last_trigger_time": "ISO8601_NOW",
+     "last_heartbeat_time": "ISO8601_NOW",
+     "heartbeat_actor": "address",
      "awaiting_clarification": false,
      "revision_history": [],
      "address_prefix": "/",
@@ -175,9 +187,18 @@ If state.json does **not** exist (the address agent is starting the cycle), init
    }
    STATEEOF
    ```
-   Replace `TIMESTAMP` and `ISO8601_NOW` with the output of `date -u +"%Y%m%dT%H%M%SZ"` and `date -u +"%Y-%m-%dT%H:%M:%SZ"` respectively. Replace the prefix values with detected prefixes. Set `address_skill_loaded` to `true` (since `/address` is already running). Do NOT guess — read the system clock.
+   Replace `TIMESTAMP` and `ISO8601_NOW` with the output of `date -u +"%Y%m%dT%H%M%SZ"` and `date -u +"%Y-%m-%dT%H:%M:%SZ"` respectively. Initialize `last_heartbeat_time` to the same `ISO8601_NOW` value and set `heartbeat_actor` to `address`. Replace the prefix values with detected prefixes. Set `address_skill_loaded` to `true` (since `/address` is already running). Do NOT guess — read the system clock.
 
 Then proceed:
+
+Before any `gh` command in `ADDRESS: begin`, validate GitHub auth:
+
+```bash
+if ! gh auth status >/dev/null 2>&1; then
+  echo "ERROR: GitHub authentication failed. Run 'gh auth login' and retry."
+  exit 1
+fi
+```
 
 1. Identify the default branch:
    ```bash
@@ -277,13 +298,18 @@ Update state.json: set `last_trigger` to `ADDRESS: continue`, `revision_round` t
    git fetch origin && git rebase origin/<default-branch>
    git push --force-with-lease
    ```
-   Then retry merge. If still failing, label `needs-human` and move on.
+   Then retry merge. If still failing, label `needs-human`, do NOT close any issues, and move on to step 3.
 
-2. Explicitly close the issues listed in the PR body (do not rely on auto-close from commit messages — squash merges may not propagate closing keywords):
+2. If the PR is merged, explicitly close the issues listed in the PR body (do not rely on auto-close from commit messages — squash merges may not propagate closing keywords):
    ```bash
-   for issue in $(gh pr view <number> --json body -q '.body' | grep -oiE 'closes?\s+#[0-9]+' | grep -oE '[0-9]+'); do
-     gh issue close "$issue" --reason completed
-   done
+   merge_state=$(gh pr view <number> --json state --jq '.state')
+   if [ "$merge_state" != "MERGED" ]; then
+     echo "PR not merged — skipping issue closure"
+   else
+     for issue in $(gh pr view <number> --json body -q '.body' | grep -oiE 'closes?\s+#[0-9]+' | grep -oE '[0-9]+'); do
+       gh issue close "$issue" --reason completed
+     done
+   fi
    ```
 
 3. Check the batch cap — read `batches_created` from state.json. If >= 5, signal completion.
