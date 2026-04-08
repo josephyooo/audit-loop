@@ -58,6 +58,8 @@ tmux send-keys -t address Enter
 
 Every send-keys snippet below follows this pattern. Preserve it exactly.
 
+4. **First trigger to the address agent MUST include the skill prefix.** Read `address_prefix` from state.json. The very first `tmux send-keys -t address` in the cycle must prepend `{address_prefix}address ` to the trigger phrase (e.g. `$address ADDRESS: begin ` for Codex, or `/address ADDRESS: begin ` for Claude). After the first trigger is sent, subsequent triggers use bare `ADDRESS:` phrases — the skill is already loaded. To track this, after sending the first prefixed trigger, set `"address_skill_loaded": true` in state.json. Before each trigger, check this flag — if `false` or missing, use the prefix.
+
 ## Receive Protocol — CRITICAL
 
 **On any input**, check whether it matches a known trigger phrase (`AUDIT: review PR #N` or `AUDIT: complete`). If it does, you MUST execute the corresponding handler below exactly as written — run the `gh` commands, post PR reviews via `gh pr review`, update state.json, and send tmux triggers to the address agent. Do NOT just discuss your findings in chat. Every review MUST result in either `gh pr review N --approve` or `gh pr review N --request-changes`, followed by a tmux trigger to the address agent.
@@ -103,7 +105,7 @@ Review a specific PR and iterate with the address agent until it's clean. Skips 
 
 1. Parse the PR number from the argument.
 
-2. Initialize state (same as Repo mode Step 2 — create `.audit-loop/`, write state.json), but set:
+2. Detect the address agent's harness (same as Repo mode Step 2) and initialize state (same as Repo mode Step 3 — create `.audit-loop/`, write state.json), but set:
    ```json
    {
      "cycle_id": "TIMESTAMP",
@@ -115,18 +117,22 @@ Review a specific PR and iterate with the address agent until it's clean. Skips 
      "last_trigger": "pr-review",
      "last_trigger_time": "ISO8601_NOW",
      "awaiting_clarification": false,
-     "revision_history": []
+     "revision_history": [],
+     "address_prefix": "/",
+     "audit_prefix": "/",
+     "address_skill_loaded": false,
+     "audit_skill_loaded": true
    }
    ```
-   Replace `TIMESTAMP` and `ISO8601_NOW` with the output of `date -u +"%Y%m%dT%H%M%SZ"` and `date -u +"%Y-%m-%dT%H:%M:%SZ"` respectively. Do NOT guess — read the system clock.
+   Replace `TIMESTAMP` and `ISO8601_NOW` with the output of `date -u +"%Y%m%dT%H%M%SZ"` and `date -u +"%Y-%m-%dT%H:%M:%SZ"` respectively. Replace the prefix values with detected prefixes. Set `audit_skill_loaded` to `true` (since `/audit` is already running). Do NOT guess — read the system clock.
 
-3. Ensure labels exist (same as Repo mode Step 3 label setup).
+3. Ensure labels exist (same as Repo mode Step 4 label setup).
 
-4. Jump directly to the **"On AUDIT: review PR #N"** handler in Step 5 below, using the PR number from the argument. Follow it exactly — post `gh pr review`, send tmux triggers, etc.
+4. Jump directly to the **"On AUDIT: review PR #N"** handler in Step 6 below, using the PR number from the argument. Follow it exactly — post `gh pr review`, send tmux triggers, etc.
 
-   **Important:** The first trigger sent to the address agent in PR mode MUST use the `/address` prefix to load the skill (e.g. `/address ADDRESS: revise PR #N ` or `/address ADDRESS: continue `). Subsequent triggers use bare `ADDRESS:` phrases.
+   **Important:** Follow Sending Triggers rule 4 — the first trigger to the address agent must include the skill prefix. Set `address_skill_loaded` to `true` after sending it.
 
-5. When the address agent sends `AUDIT: complete` (or the PR is approved and merged), run the final sweep (Step 6) but skip the critiqued-issue revision (there are no audit-filed issues in PR mode).
+5. When the address agent sends `AUDIT: complete` (or the PR is approved and merged), run the final sweep (Step 7) but skip the critiqued-issue revision (there are no audit-filed issues in PR mode).
 
 ---
 
@@ -153,7 +159,25 @@ The topic does not need to match the examples above exactly — interpret the us
 
 Skip trivial style nits unless they mask bugs.
 
-### Step 2: Initialize state
+### Step 2: Detect agent harnesses
+
+Before initializing state, detect what skill prefix each agent uses. For each tmux session, capture the last few lines and match:
+
+```bash
+tmux capture-pane -t address -p -S -5
+tmux capture-pane -t audit -p -S -5
+```
+
+Matching rules (apply to each session's output):
+- Contains `Claude Code` or `claude` → prefix is `/`
+- Contains `Codex` or `codex` → prefix is `$`
+- Contains `Copilot` or `copilot` → prefix is `/`
+- Contains `Gemini` or `gemini` → prefix is `/`
+- No match → ask the user: "What skill prefix does the [audit/address] agent use? (`/` for Claude/Copilot/Gemini, `$` for Codex)"
+
+Store the results as `address_prefix` and `audit_prefix` in state.json (see Step 3 below).
+
+### Step 3: Initialize state
 
 Create the `.audit-loop/` directory and add it to `.gitignore`:
 
@@ -176,14 +200,18 @@ cat > .audit-loop/state.json << 'STATEEOF'
   "last_trigger": "audit-start",
   "last_trigger_time": "ISO8601_NOW",
   "awaiting_clarification": false,
-  "revision_history": []
+  "revision_history": [],
+  "address_prefix": "/",
+  "audit_prefix": "/",
+  "address_skill_loaded": false,
+  "audit_skill_loaded": true
 }
 STATEEOF
 ```
 
-Replace `TIMESTAMP` and `ISO8601_NOW` with the output of `date -u +"%Y%m%dT%H%M%SZ"` and `date -u +"%Y-%m-%dT%H:%M:%SZ"` respectively. Do NOT guess — read the system clock.
+Replace `TIMESTAMP` and `ISO8601_NOW` with the output of `date -u +"%Y%m%dT%H%M%SZ"` and `date -u +"%Y-%m-%dT%H:%M:%SZ"` respectively. Replace the prefix values with detected prefixes from Step 2. Set `audit_skill_loaded` to `true` (since `/audit` is already running). Do NOT guess — read the system clock.
 
-### Step 3: File GitHub issues
+### Step 4: File GitHub issues
 
 Ensure labels exist (run once):
 
@@ -228,23 +256,29 @@ Include enough detail that a fixer can work without re-auditing. Order by severi
 
 **Pattern detection:** After filing all issues, review them as a group. If 3+ issues share a root cause (e.g., multiple unsanitized inputs, repeated missing null checks in the same subsystem), add a comment to one of them noting the pattern and suggesting a systemic fix rather than N individual patches.
 
-### Step 4: Trigger address agent
+### Step 5: Trigger address agent
 
 Update state.json: set `phase` to `address-fixing`, update `last_trigger_time`.
 
+Read `address_prefix` from state.json. Use it for the first trigger:
+
 ```bash
-tmux send-keys -t address "/address ADDRESS: begin "
+tmux send-keys -t address "{address_prefix}address ADDRESS: begin "
 ```
 Then in a **separate** bash call (preserve the trailing space above; do NOT chain with && or ;):
 ```bash
 tmux send-keys -t address Enter
 ```
 
+For example, if `address_prefix` is `$`, send `$address ADDRESS: begin `. If `/`, send `/address ADDRESS: begin `.
+
+After sending, set `"address_skill_loaded": true` in state.json.
+
 Print: "Triggered address agent. Waiting for review request..."
 
 Then wait for the address agent to send a message to this session.
 
-### Step 5: Handle incoming triggers
+### Step 6: Handle incoming triggers
 
 When a message arrives, first run the timeout check (see above). Then act based on its prefix:
 
@@ -401,7 +435,7 @@ Update state.json: set `phase` to `complete`, update `last_trigger_time`.
 
 Proceed to Step 6.
 
-### Step 6: Final sweep
+### Step 7: Final sweep
 
 1. **Check for critiqued issues.** The address agent may have removed the `audit-loop` label from issues that were unclear or invalid. Find them:
    ```bash

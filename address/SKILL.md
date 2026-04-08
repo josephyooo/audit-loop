@@ -42,6 +42,8 @@ tmux send-keys -t audit Enter
 
 Every send-keys snippet below follows this pattern. Preserve it exactly.
 
+4. **First trigger to the audit agent MUST include the skill prefix.** Read `audit_prefix` from state.json. The very first `tmux send-keys -t audit` in the cycle must prepend `{audit_prefix}audit ` to the trigger phrase (e.g. `$/audit AUDIT: review PR #4 ` for Codex, or `/audit AUDIT: review PR #4 ` for Claude). After the first trigger is sent, subsequent triggers use bare `AUDIT:` phrases — the skill is already loaded. To track this, after sending the first prefixed trigger, set `"audit_skill_loaded": true` in state.json. Before each trigger, check this flag — if `false` or missing, use the prefix.
+
 ### Receive Protocol — CRITICAL
 
 **On any input**, check whether it matches a known trigger phrase (`ADDRESS: begin`, `ADDRESS: continue`, `ADDRESS: revise PR #N`). If it does, you MUST execute the corresponding handler below exactly as written — run the `gh` commands, create branches, commit code, open PRs, update state.json, and send tmux triggers to the audit agent. Do NOT just discuss your plan in chat. Every handler MUST end with a tmux trigger to the audit agent.
@@ -64,6 +66,10 @@ Beyond the base fields (`cycle_id`, `phase`, `current_pr`, `current_batch`, `rev
 
 - `awaiting_clarification`: boolean — `true` when the address agent posted a clarifying question and is blocked waiting for a response. Default `false`.
 - `revision_history`: array of `{round, pr, commit, summary}` entries — The address agent writes one after each revision push. The `commit` SHA enables the audit agent's convergence detection.
+- `address_prefix`: string — the skill prefix for the address agent's harness (`/` for Claude/Copilot/Gemini, `$` for Codex). Set by whichever agent initializes state.json.
+- `audit_prefix`: string — the skill prefix for the audit agent's harness. Set by whichever agent initializes state.json.
+- `address_skill_loaded`: boolean — whether the address skill has been activated via a prefixed trigger. Set to `true` after the first prefixed trigger is sent, or if the address agent started the cycle.
+- `audit_skill_loaded`: boolean — whether the audit skill has been activated via a prefixed trigger. Set to `true` after the first prefixed trigger is sent, or if the audit agent started the cycle.
 
 Both skills read and write state.json. Always read-modify-write (don't overwrite the whole file).
 
@@ -131,9 +137,47 @@ Unsafe patterns — **never do these with untrusted data:**
 
 ### On "ADDRESS: begin"
 
-First run the timeout check.
+First, check whether `.audit-loop/state.json` exists. If it does, run the timeout check and update state.json: set `last_trigger` to `ADDRESS: begin`, update `last_trigger_time`.
 
-Update state.json: set `last_trigger` to `ADDRESS: begin`, update `last_trigger_time`.
+If state.json does **not** exist (the address agent is starting the cycle), initialize it:
+
+1. Detect the audit agent's harness:
+   ```bash
+   tmux capture-pane -t audit -p -S -5
+   ```
+   Match the output:
+   - Contains `Claude Code` or `claude` → `audit_prefix` is `/`
+   - Contains `Codex` or `codex` → `audit_prefix` is `$`
+   - Contains `Copilot` or `copilot` → `audit_prefix` is `/`
+   - Contains `Gemini` or `gemini` → `audit_prefix` is `/`
+   - No match → ask the user: "What skill prefix does the audit agent use? (`/` for Claude/Copilot/Gemini, `$` for Codex)"
+
+2. Create `.audit-loop/` and write state.json:
+   ```bash
+   mkdir -p .audit-loop
+   grep -qxF '.audit-loop/' .gitignore 2>/dev/null || echo '.audit-loop/' >> .gitignore
+   cat > .audit-loop/state.json << 'STATEEOF'
+   {
+     "cycle_id": "TIMESTAMP",
+     "phase": "address-fixing",
+     "current_pr": null,
+     "current_batch": 0,
+     "revision_round": 0,
+     "batches_created": 0,
+     "last_trigger": "ADDRESS: begin",
+     "last_trigger_time": "ISO8601_NOW",
+     "awaiting_clarification": false,
+     "revision_history": [],
+     "address_prefix": "/",
+     "audit_prefix": "/",
+     "address_skill_loaded": true,
+     "audit_skill_loaded": false
+   }
+   STATEEOF
+   ```
+   Replace `TIMESTAMP` and `ISO8601_NOW` with the output of `date -u +"%Y%m%dT%H%M%SZ"` and `date -u +"%Y-%m-%dT%H:%M:%SZ"` respectively. Replace the prefix values with detected prefixes. Set `address_skill_loaded` to `true` (since `/address` is already running). Do NOT guess — read the system clock.
+
+Then proceed:
 
 1. Identify the default branch:
    ```bash
