@@ -39,7 +39,7 @@ tmux new -s address
 
 In both sessions, `cd` to the target repo and start your chosen agent.
 
-Ensure `gh` CLI is authenticated with repo access.
+Ensure `gh` CLI is authenticated with repo access. Both skills also run `gh auth status` before their first GitHub command and stop immediately if auth is broken.
 
 ## Usage
 
@@ -57,8 +57,9 @@ Ensure `gh` CLI is authenticated with repo access.
 6. The audit agent reviews the PR:
    - **Approve** -> address agent merges and starts the next batch
    - **Request changes** (structured `WRONG|INCOMPLETE|REGRESSION` feedback) -> address agent revises
-7. Repeat until all issues are addressed or safety caps are hit
-8. The audit agent does a final sweep: revises any critiqued issues, re-labels them, and triggers another round if needed
+7. While one agent is waiting on the other, it re-runs the timeout check every 5 minutes; during long work, it refreshes heartbeat state so crashes still trip the watchdog.
+8. Repeat until all issues are addressed or safety caps are hit
+9. The audit agent does a final sweep: revises any critiqued issues, re-labels them, and triggers another round if needed
 
 ### Manual mode
 
@@ -97,13 +98,14 @@ AUDIT: complete                # all batches done
 
 - **5 PRs max** per audit cycle
 - **3 revision rounds max** per PR
-- **30-minute timeout** for normal operations
+- **30-minute timeout** for normal operations, measured against the latest trigger or heartbeat
 - **2-hour timeout** for clarification requests
+- **5-minute watchdog poll** while waiting on the peer agent
 - Exceeded caps -> `needs-human` label, move on
 
 ## State
 
-Loop state is stored in `{repo}/.audit-loop/state.json` (gitignored). This enables crash recovery — both agents check state.json on session restart to resume where they left off.
+Loop state is stored in `{repo}/.audit-loop/state.json` (gitignored). This enables crash recovery — both agents check state.json on session restart to resume where they left off. The file also carries `last_heartbeat_time` and `heartbeat_actor` so the timeout can detect stalls even when no new trigger arrives.
 
 Hypotheses are written to `{repo}/.audit-loop/batch-N-hypotheses.md` before any code is edited, and copied into the PR description.
 
@@ -125,5 +127,6 @@ Hypotheses are written to `{repo}/.audit-loop/batch-N-hypotheses.md` before any 
 - **Nitpick guard**: Auditing agent approves if functionally correct, no style-only rejections
 - **Convergence detection**: At revision round 2, if diffs are cancelling out, escalate instead of looping
 - **Clarification flow**: Addressing agent asks instead of guessing on ambiguous feedback
+- **Heartbeat watchdog**: Waiting agents poll every 5 minutes, and working agents refresh heartbeat state during long tasks
 - **Scope ceiling**: Systemic fixes limited to 3 extra files; larger fixes get their own issue
 - **Duplicate detection**: Auditing agent reopens prior issues with escalated severity instead of filing duplicates
