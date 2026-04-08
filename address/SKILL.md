@@ -174,9 +174,9 @@ Update state.json: set `last_trigger` to `ADDRESS: begin`, update `last_trigger_
    gh issue list --label audit-loop --state open --json number,title,labels,body --limit 100
    ```
 
-4. If no issues found, signal completion immediately (see "Signal completion" below).
+5. If no issues found, signal completion immediately (see "Signal completion" below).
 
-5. **Validate each issue before planning work.** For each issue, check:
+6. **Validate each issue before planning work.** For each issue, check:
    - Is the scope clear enough to implement? (not vague like "improve performance")
    - Are the acceptance criteria concrete and verifiable?
    - Does it conflict with or duplicate another open issue?
@@ -192,14 +192,16 @@ Update state.json: set `last_trigger` to `ADDRESS: begin`, update `last_trigger_
    ```
    Continue with the remaining valid issues.
 
-6. Group valid issues into batches by relatedness:
+7. If no valid issues remain after validation, signal completion immediately (see "Signal completion" below).
+
+8. Group valid issues into batches by relatedness:
    - Same file or subsystem/directory → same batch
    - Same category (e.g., all `cat:security` input validation) → same batch
    - Unrelated issues → separate batches
    - Order batches by severity (critical/high first)
    - Target 2-5 issues per batch. Single-issue batches are fine for complex fixes.
 
-7. Print the batch plan:
+9. Print the batch plan:
    ```
    ## Batch Plan
    Batch 1: #12, #13, #15 (auth input validation)
@@ -207,7 +209,7 @@ Update state.json: set `last_trigger` to `ADDRESS: begin`, update `last_trigger_
    Batch 3: #16 (deprecated dependency)
    ```
 
-8. Fix batch 1 (see "Fix a batch" below).
+10. Fix batch 1 (see "Fix a batch" below).
 
 ### On "ADDRESS: continue"
 
@@ -322,22 +324,27 @@ Update state.json: set `last_trigger` to `ADDRESS: revise PR #N`, update `last_t
    gh pr edit N --remove-label "tests-failing"
    ```
 
-8. Update the revision marker in the PR body. Read current body, find or insert:
+8. Before updating the PR body or writing revision artifacts, derive the next revision number:
+   ```bash
+   next_revision_round=$((revision_round + 1))
+   ```
+
+9. Update the revision marker in the PR body. Read current body, find or insert:
    ```
    <!-- audit-revision: N -->
    ```
-   Update N to the current `revision_round` from state.json.
+   Update N to `next_revision_round`.
 
-9. **Stage and commit.** Apply the same secret file exclusion as "Fix a batch" step 7 — never stage `.env`, credentials, keys, etc. Use explicit file paths.
+10. **Stage and commit.** Apply the same secret file exclusion as "Fix a batch" step 7 — never stage `.env`, credentials, keys, etc. Use explicit file paths.
    ```bash
-   git add <specific files> && git commit -m "address review feedback (round <revision_round>) on PR #N"
+   git add <specific files> && git commit -m "address review feedback (round <next_revision_round>) on PR #N"
    git push
    ```
 
-10. **Post a revision summary comment on the PR** so the audit agent (and humans) can see the reasoning:
+11. **Post a revision summary comment on the PR** so the audit agent (and humans) can see the reasoning:
     ```bash
     gh pr comment N --body "$(cat <<'REVEOF'
-    ## Revision Round <revision_round>
+    ## Revision Round <next_revision_round>
 
     ### Analysis
     <copy the parsed review tasks from step 4 here — File, Requested change, My plan for each>
@@ -351,14 +358,14 @@ Update state.json: set `last_trigger` to `ADDRESS: revise PR #N`, update `last_t
     )"
     ```
 
-11. **Increment `revision_round`** in state.json (The address agent owns this counter — only increment when pushing an actual code change, not on clarification).
+12. **Persist `next_revision_round`** in state.json (The address agent owns this counter — only update it when pushing an actual code change, not on clarification).
 
     Write a `revision_history` entry:
     ```json
-    { "round": <revision_round>, "pr": N, "commit": "<git rev-parse HEAD>", "summary": "<one-line description>" }
+    { "round": <next_revision_round>, "pr": N, "commit": "<git rev-parse HEAD>", "summary": "<one-line description>" }
     ```
 
-    Update state.json: set `phase` to `reviewing`, update `last_trigger_time`.
+    Update state.json: set `revision_round` to `next_revision_round`, `phase` to `reviewing`, update `last_trigger_time`.
     ```bash
     tmux send-keys -t audit "AUDIT: review PR #N "
     ```
