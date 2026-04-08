@@ -332,6 +332,7 @@ tmux send-keys -t address Enter
 
    **Convergence check (after 2nd revision, before requesting the 3rd):** If `revision_round` >= 2, check for convergence before requesting another round. Read `revision_history` from state.json and get the previous revision's commit SHA. Compare using the PR tip commit (not local `HEAD`, which may not be the PR branch):
    ```bash
+   git fetch origin
    base=$(gh pr view N --json commits --jq '.commits[0].oid')
    tip=$(gh pr view N --json commits --jq '.commits[-1].oid')
    prev_commit=<from revision_history[-1].commit>
