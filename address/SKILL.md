@@ -336,9 +336,11 @@ Update state.json: set `last_trigger` to `ADDRESS: revise PR #N`, update `last_t
 
 2. Read review comments:
    ```bash
-   gh pr view N --json reviews --jq '.reviews[-1].body'
-   gh api repos/{owner}/{repo}/pulls/N/comments --jq '.[] | select(.pull_request_review_id) | {path, body, line}'
+   review_body=$(gh pr view N --json reviews --jq '(.reviews[-1].body // empty)')
+   repo=$(gh repo view --json nameWithOwner -q '.nameWithOwner')
+   gh api "repos/$repo/pulls/N/comments" --jq '.[] | select(.pull_request_review_id) | {path, body, line}'
    ```
+   If `review_body` is empty, the audit review has not been posted yet (or was deleted). Re-send `AUDIT: review PR #N`, do not check out the branch, and wait for the next trigger instead of parsing empty feedback.
 
 3. Check out the PR branch:
    ```bash
