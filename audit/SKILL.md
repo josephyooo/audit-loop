@@ -328,9 +328,10 @@ Update state.json: set `phase` to `reviewing`, `current_pr` to N, update `last_t
    
    If `true`, the address agent is blocked on a clarification. Find the unanswered question:
    ```bash
-   gh pr view N --json comments --jq '[.comments[] | select(.body | startswith("Clarification needed:"))] | last | .body'
+   gh pr view N --json comments \
+     --jq '[.comments[] | select(.body | startswith("Clarification needed:"))] | if length > 0 then last.body else empty end'
    ```
-   Answer it directly based on your original review intent:
+   If the command prints a clarification comment, answer it directly based on your original review intent:
    ```bash
    gh pr comment N --body "$(cat <<'EOF'
    <answer the clarification>
@@ -342,6 +343,8 @@ Update state.json: set `phase` to `reviewing`, `current_pr` to N, update `last_t
    2. Send `ADDRESS: revise PR #N` via tmux
 
    Do not proceed with the diff review — the address agent will revise first.
+
+   If the command prints nothing, the state flag is stale or the clarification comment was removed. Clear `awaiting_clarification` in state.json and continue with step 2 instead of looking for a ghost comment.
    
    **Important:** Do NOT search for clarification comments when `awaiting_clarification` is `false`. Historical clarification comments that have already been answered must be ignored — the state flag is the source of truth, not the comment history.
 
@@ -405,7 +408,7 @@ tmux send-keys -t address Enter
    git fetch origin
    base=$(gh pr view N --json commits --jq '.commits[0].oid')
    tip=$(gh pr view N --json commits --jq '.commits[-1].oid')
-   prev_commit=<from revision_history[-1].commit>
+   prev_commit=$(jq -r '.revision_history[-1].commit // empty' .audit-loop/state.json)
    if [ -z "$base" ] || [ -z "$tip" ] || [ -z "$prev_commit" ]; then
      echo "WARNING: Could not resolve commit SHAs for convergence check — skipping"
    else
@@ -481,7 +484,7 @@ Proceed to Step 6.
 1. **Check for critiqued issues.** The address agent may have removed the `audit-loop` label from issues that were unclear or invalid. Find them:
    ```bash
    gh issue list --state open --json number,title,body,comments,labels --limit 100 \
-     --jq '[.[] | select(.comments[-1].body | startswith("Issue needs clarification"))]'
+     --jq '[.[] | select((.comments | length) > 0 and any(.comments[]; .body | startswith("Issue needs clarification")))]'
    ```
    For each critiqued issue:
    - Read the address agent's comment to understand what's unclear
