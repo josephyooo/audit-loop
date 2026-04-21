@@ -1,0 +1,100 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 620" font-family="ui-sans-serif, system-ui, sans-serif" font-size="13">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#475569"/>
+    </marker>
+    <style>
+      .box { fill: #f8fafc; stroke: #334155; stroke-width: 1.5; rx: 8; }
+      .title { font-weight: 700; font-size: 14px; fill: #0f172a; }
+      .sub { fill: #334155; }
+      .muted { fill: #64748b; font-size: 12px; }
+      .step { fill: #1e3a8a; font-weight: 700; font-size: 11px; }
+      .change { fill: #ecfeff; stroke: #0891b2; }
+      .execute { fill: #fff7ed; stroke: #ea580c; }
+      .input { fill: #f1f5f9; stroke: #64748b; }
+      .output { fill: #f0fdf4; stroke: #16a34a; }
+      .label-change { fill: #0e7490; font-weight: 700; }
+      .label-execute { fill: #c2410c; font-weight: 700; }
+      .edge { stroke: #475569; stroke-width: 1.5; fill: none; }
+      .dashed { stroke-dasharray: 5 4; }
+    </style>
+  </defs>
+
+  <text x="460" y="28" text-anchor="middle" font-size="18" font-weight="700" fill="#0f172a">/issues — plan → self-contained GitHub issues</text>
+  <text x="460" y="48" text-anchor="middle" class="muted">Runs in the planning agent. Produces issues the audit-loop (/audit + /address) can execute without guessing.</text>
+
+  <!-- Input -->
+  <rect class="box input" x="30" y="80" width="200" height="90"/>
+  <text x="130" y="102" text-anchor="middle" class="title">Input</text>
+  <text x="130" y="124" text-anchor="middle" class="sub">Plan text, file path,</text>
+  <text x="130" y="142" text-anchor="middle" class="sub">or plan-mode context</text>
+  <text x="130" y="160" text-anchor="middle" class="muted">(prompt user if missing)</text>
+
+  <!-- Step 1 -->
+  <rect class="box" x="280" y="80" width="200" height="90"/>
+  <text x="295" y="100" class="step">STEP 1</text>
+  <text x="380" y="118" text-anchor="middle" class="title">Parse into steps</text>
+  <text x="380" y="140" text-anchor="middle" class="sub">one step → one issue</text>
+
+  <!-- Step 2 -->
+  <rect class="box" x="530" y="80" width="360" height="90"/>
+  <text x="545" y="100" class="step">STEP 2 — Classify</text>
+  <text x="710" y="124" text-anchor="middle" class="sub"><tspan class="label-change">change</tspan> (edit code/docs)  ·  <tspan class="label-execute">execute</tspan> (run script/job)</text>
+  <text x="710" y="148" text-anchor="middle" class="muted">split hybrid steps into two linked issues</text>
+
+  <!-- Step 3 -->
+  <rect class="box" x="30" y="210" width="400" height="100"/>
+  <text x="45" y="230" class="step">STEP 3 — Research before filing</text>
+  <text x="230" y="252" text-anchor="middle" class="sub">Read README / AGENTS / Makefile / CI</text>
+  <text x="230" y="270" text-anchor="middle" class="sub">Verify files exist; identify entry-point + env/flags</text>
+  <text x="230" y="290" text-anchor="middle" class="muted">If concrete details unknown → decompose or ask user</text>
+
+  <!-- Step 4 -->
+  <rect class="box" x="460" y="210" width="430" height="100"/>
+  <text x="475" y="230" class="step">STEP 4 — Derive labels</text>
+  <text x="675" y="252" text-anchor="middle" class="sub">severity: critical / high / medium (default) / low</text>
+  <text x="675" y="270" text-anchor="middle" class="sub">cat: security · correctness · performance · maintainability · dependency</text>
+  <text x="675" y="290" text-anchor="middle" class="muted">keyword-mapping inference when no explicit hint</text>
+
+  <!-- Step 5 split templates -->
+  <rect class="box change" x="30" y="340" width="420" height="180"/>
+  <text x="45" y="360" class="step" fill="#0e7490">STEP 5a — change issue</text>
+  <text x="240" y="380" text-anchor="middle" class="title">gh issue create + template</text>
+  <text x="45" y="405" class="sub">## Context — why this step</text>
+  <text x="45" y="425" class="sub">## Files — paths to change (REQUIRED)</text>
+  <text x="45" y="445" class="sub">## Acceptance Criteria</text>
+  <text x="60" y="463" class="muted">— verifiable via shell (test passes,</text>
+  <text x="60" y="479" class="muted">   grep matches, file exists, exit 0)</text>
+  <text x="45" y="505" class="muted">labels: audit-loop + severity:* + cat:*</text>
+
+  <rect class="box execute" x="470" y="340" width="420" height="180"/>
+  <text x="485" y="360" class="step" fill="#c2410c">STEP 5b — execute issue</text>
+  <text x="680" y="380" text-anchor="middle" class="title">gh issue create + template</text>
+  <text x="485" y="405" class="sub">## Context</text>
+  <text x="485" y="425" class="sub">## Command — exact cmd, env, flags, sbatch/qsub</text>
+  <text x="485" y="445" class="sub">## Files — script + expected output artifacts</text>
+  <text x="485" y="465" class="sub">## Acceptance Criteria</text>
+  <text x="500" y="483" class="muted">— output file exists, row count matches, exit 0</text>
+  <text x="485" y="505" class="muted">labels: audit-loop + severity:* + cat:*</text>
+
+  <!-- Step 6 -->
+  <rect class="box" x="30" y="545" width="400" height="55"/>
+  <text x="45" y="565" class="step">STEP 6 — Link dependencies</text>
+  <text x="230" y="586" text-anchor="middle" class="sub">"**Depends on:** #N" in body for ordered work</text>
+
+  <!-- Step 7 output -->
+  <rect class="box output" x="460" y="545" width="430" height="55"/>
+  <text x="475" y="565" class="step" fill="#15803d">STEP 7 — Summary table</text>
+  <text x="675" y="586" text-anchor="middle" class="sub"># · Title · Type · Severity · Category · Depends on</text>
+
+  <!-- Arrows -->
+  <path class="edge" d="M230,125 L280,125" marker-end="url(#arrow)"/>
+  <path class="edge" d="M480,125 L530,125" marker-end="url(#arrow)"/>
+  <path class="edge" d="M380,170 L380,190 L230,190 L230,210" marker-end="url(#arrow)"/>
+  <path class="edge" d="M430,260 L460,260" marker-end="url(#arrow)"/>
+  <path class="edge" d="M675,310 L675,325 L240,325 L240,340" marker-end="url(#arrow)"/>
+  <path class="edge" d="M675,310 L675,340" marker-end="url(#arrow)"/>
+  <path class="edge" d="M240,520 L240,545" marker-end="url(#arrow)"/>
+  <path class="edge" d="M680,520 L680,545" marker-end="url(#arrow)"/>
+  <path class="edge dashed" d="M430,572 L460,572" marker-end="url(#arrow)"/>
+</svg>

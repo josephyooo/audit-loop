@@ -1,0 +1,136 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 780" font-family="ui-sans-serif, system-ui, sans-serif" font-size="13">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1e3a8a"/>
+    </marker>
+    <marker id="b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#b45309"/>
+    </marker>
+    <style>
+      .lane-audit { fill: #eff6ff; stroke: #1e3a8a; stroke-width: 1.5; rx: 10; }
+      .lane-addr { fill: #fff7ed; stroke: #b45309; stroke-width: 1.5; rx: 10; }
+      .node-audit { fill: #dbeafe; stroke: #1e3a8a; stroke-width: 1.3; rx: 6; }
+      .node-addr { fill: #ffedd5; stroke: #b45309; stroke-width: 1.3; rx: 6; }
+      .node-term { fill: #dcfce7; stroke: #15803d; stroke-width: 1.3; rx: 6; }
+      .node-warn { fill: #fee2e2; stroke: #b91c1c; stroke-width: 1.3; rx: 6; }
+      .head { font-weight: 700; font-size: 16px; }
+      .sub { font-weight: 600; font-size: 13px; fill: #0f172a; }
+      .muted { fill: #475569; font-size: 11px; }
+      .trigger { font-family: ui-monospace, monospace; font-size: 11px; fill: #0f172a; }
+      .edge-audit { stroke: #1e3a8a; stroke-width: 1.6; fill: none; }
+      .edge-addr  { stroke: #b45309; stroke-width: 1.6; fill: none; }
+    </style>
+  </defs>
+
+  <text x="550" y="28" text-anchor="middle" font-size="19" font-weight="700" fill="#0f172a">audit ↔ address — tmux-mediated fix loop</text>
+  <text x="550" y="48" text-anchor="middle" class="muted">Two agents in named tmux sessions coordinate via trigger phrases. Shared state: .audit-loop/state.json + GitHub issues/PRs.</text>
+
+  <!-- Lanes (wider middle gap for arrow captions) -->
+  <rect class="lane-audit" x="30" y="70" width="390" height="680"/>
+  <text x="225" y="95" text-anchor="middle" class="head" fill="#1e3a8a">tmux: audit  (/audit)</text>
+  <text x="225" y="112" text-anchor="middle" class="muted">plans work · reviews PRs · escalates</text>
+
+  <rect class="lane-addr" x="680" y="70" width="390" height="680"/>
+  <text x="875" y="95" text-anchor="middle" class="head" fill="#b45309">tmux: address  (/address)</text>
+  <text x="875" y="112" text-anchor="middle" class="muted">batches issues · opens PRs · revises</text>
+
+  <!-- Audit nodes -->
+  <rect class="node-audit" x="55" y="135" width="340" height="56"/>
+  <text x="225" y="155" text-anchor="middle" class="sub">1. Audit repo (or scoped topic)</text>
+  <text x="225" y="173" text-anchor="middle" class="muted">file issues · dedupe against closed · detect patterns</text>
+
+  <rect class="node-audit" x="55" y="210" width="340" height="50"/>
+  <text x="225" y="230" text-anchor="middle" class="sub">2. Init state.json · detect harnesses</text>
+  <text x="225" y="248" text-anchor="middle" class="muted">phase=audit-looping → address-fixing</text>
+
+  <rect class="node-audit" x="55" y="380" width="340" height="70"/>
+  <text x="225" y="400" text-anchor="middle" class="sub">4. Review PR #N</text>
+  <text x="225" y="418" text-anchor="middle" class="muted">verify each closed issue · check regressions</text>
+  <text x="225" y="434" text-anchor="middle" class="muted">answer any pending clarification first</text>
+
+  <rect class="node-audit" x="55" y="470" width="155" height="60"/>
+  <text x="132" y="490" text-anchor="middle" class="sub">approve</text>
+  <text x="132" y="508" text-anchor="middle" class="muted">gh pr review --approve</text>
+  <text x="132" y="522" text-anchor="middle" class="muted">label fix-verified</text>
+
+  <rect class="node-audit" x="240" y="470" width="155" height="60"/>
+  <text x="317" y="490" text-anchor="middle" class="sub">request changes</text>
+  <text x="317" y="508" text-anchor="middle" class="muted">structured template</text>
+  <text x="317" y="522" text-anchor="middle" class="muted">WRONG/INCOMPLETE/REGRESSION</text>
+
+  <rect class="node-warn" x="55" y="555" width="340" height="60"/>
+  <text x="225" y="575" text-anchor="middle" class="sub">Escalation</text>
+  <text x="225" y="593" text-anchor="middle" class="muted">round ≥ 3 cap · convergence &lt; 30% at round ≥ 2</text>
+  <text x="225" y="607" text-anchor="middle" class="muted">label needs-human → send ADDRESS: continue</text>
+
+  <rect class="node-term" x="55" y="660" width="340" height="60"/>
+  <text x="225" y="680" text-anchor="middle" class="sub">7. Final sweep</text>
+  <text x="225" y="698" text-anchor="middle" class="muted">re-label critiqued issues · summarize cycle</text>
+  <text x="225" y="712" text-anchor="middle" class="muted">phase = complete</text>
+
+  <!-- Address nodes -->
+  <rect class="node-addr" x="705" y="135" width="340" height="70"/>
+  <text x="875" y="155" text-anchor="middle" class="sub">A. ADDRESS: begin</text>
+  <text x="875" y="173" text-anchor="middle" class="muted">deadlock + orphan recovery · fetch issues</text>
+  <text x="875" y="189" text-anchor="middle" class="muted">validate (critique if vague) · group into batches</text>
+
+  <rect class="node-addr" x="705" y="225" width="340" height="120"/>
+  <text x="875" y="245" text-anchor="middle" class="sub">B. Fix a batch</text>
+  <text x="875" y="265" text-anchor="middle" class="muted">git log research · hypothesis per issue (4a)</text>
+  <text x="875" y="281" text-anchor="middle" class="muted">apply fixes (systemic if shared root cause)</text>
+  <text x="875" y="297" text-anchor="middle" class="muted">lint/fmt · self-review diff · commit</text>
+  <text x="875" y="313" text-anchor="middle" class="muted">push + open PR · label fix-submitted</text>
+  <text x="875" y="329" text-anchor="middle" class="muted">scope ceiling: ≤3 unrelated files</text>
+
+  <rect class="node-addr" x="705" y="380" width="340" height="120"/>
+  <text x="875" y="400" text-anchor="middle" class="sub">C. ADDRESS: revise PR #N</text>
+  <text x="875" y="420" text-anchor="middle" class="muted">parse review into File / Requested / Plan</text>
+  <text x="875" y="436" text-anchor="middle" class="muted">ambiguous? post "Clarification needed:"</text>
+  <text x="875" y="452" text-anchor="middle" class="muted">  → set awaiting_clarification=true, wait</text>
+  <text x="875" y="472" text-anchor="middle" class="muted">else edit · lint · commit · push</text>
+  <text x="875" y="488" text-anchor="middle" class="muted">increment revision_round · append revision_history</text>
+
+  <rect class="node-addr" x="705" y="525" width="340" height="80"/>
+  <text x="875" y="545" text-anchor="middle" class="sub">D. ADDRESS: continue</text>
+  <text x="875" y="565" text-anchor="middle" class="muted">merge PR (squash) · close referenced issues</text>
+  <text x="875" y="581" text-anchor="middle" class="muted">tests-failing? skip merge, label needs-human</text>
+  <text x="875" y="597" text-anchor="middle" class="muted">batches_created ≥ 5 or no issues → signal complete</text>
+
+  <rect class="node-term" x="705" y="660" width="340" height="60"/>
+  <text x="875" y="680" text-anchor="middle" class="sub">Signal completion</text>
+  <text x="875" y="698" text-anchor="middle" class="muted">send AUDIT: complete · phase = complete</text>
+
+  <!-- Arrows between lanes -->
+  <!-- audit step 2 → ADDRESS: begin -->
+  <path class="edge-audit" d="M395,235 C500,235 580,170 705,170" marker-end="url(#a)"/>
+  <text x="550" y="195" text-anchor="middle" class="trigger" fill="#1e3a8a">ADDRESS: begin</text>
+
+  <!-- fix batch → AUDIT: review -->
+  <path class="edge-addr" d="M705,285 C580,285 500,410 395,410" marker-end="url(#b)"/>
+  <text x="550" y="355" text-anchor="middle" class="trigger" fill="#b45309">AUDIT: review PR #N</text>
+
+  <!-- approve → ADDRESS: continue -->
+  <path class="edge-audit" d="M210,500 C430,520 580,545 705,550" marker-end="url(#a)"/>
+  <text x="440" y="545" text-anchor="middle" class="trigger" fill="#1e3a8a">ADDRESS: continue</text>
+
+  <!-- request changes → ADDRESS: revise (exits right side) -->
+  <path class="edge-audit" d="M395,500 C500,500 600,430 705,415" marker-end="url(#a)"/>
+  <text x="550" y="455" text-anchor="middle" class="trigger" fill="#1e3a8a">ADDRESS: revise PR #N</text>
+
+  <!-- revise push → review again -->
+  <path class="edge-addr" d="M705,455 C600,455 500,425 395,415" marker-end="url(#b)"/>
+  <text x="550" y="428" text-anchor="middle" class="trigger" fill="#b45309">AUDIT: review PR #N</text>
+
+  <!-- escalation → continue -->
+  <path class="edge-audit" d="M395,585 C500,585 600,575 705,570" marker-end="url(#a)"/>
+  <text x="550" y="600" text-anchor="middle" class="trigger" fill="#1e3a8a">ADDRESS: continue (needs-human)</text>
+
+  <!-- continue loops back to next batch -->
+  <path class="edge-addr" d="M1045,545 C1075,445 1075,365 1045,345" marker-end="url(#b)" stroke-dasharray="5 4"/>
+  <text x="1080" y="445" class="muted" text-anchor="start">next</text>
+  <text x="1080" y="460" class="muted" text-anchor="start">batch</text>
+
+  <!-- completion -->
+  <path class="edge-addr" d="M705,685 C600,685 500,685 395,685" marker-end="url(#b)"/>
+  <text x="550" y="680" text-anchor="middle" class="trigger" fill="#b45309">AUDIT: complete</text>
+</svg>

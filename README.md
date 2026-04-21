@@ -14,6 +14,10 @@ Agent-agnostic skills that orchestrate an automated audit-fix loop between any t
 
 Works with any agent that supports the Agent Skills standard (Claude Code, Codex CLI, Copilot CLI, Gemini CLI, etc.).
 
+## How it works
+
+![audit ↔ address loop](docs/audit-address-loop.svg)
+
 ## Setup
 
 Symlink into whichever agent skill directories you use:
@@ -76,6 +80,8 @@ Run `/audit #N` to review an existing PR. The audit agent reviews the diff, post
 ### Feature mode
 
 You can also use the loop to implement new features. Plan the feature (e.g. using plan mode), then run `/issues` to create `audit-loop`-labeled issues from the plan. Start the address agent with `ADDRESS: begin` — the audit agent reviews each PR as a quality gate.
+
+![/issues flow](docs/issues-flow.svg)
 
 ## Trigger Protocol
 
