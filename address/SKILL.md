@@ -246,6 +246,18 @@ fi
    - Are the acceptance criteria concrete and verifiable?
    - Does it conflict with or duplicate another open issue?
    - Are the referenced files/APIs real? (quick check — `ls` or `grep`)
+   - **Does it carry `kind:execute`?** If yes, you MUST be able to run the command in the issue's `## Command` block and produce the artifacts listed in `## Files` *in this session*. Before accepting a `kind:execute` issue into a batch, confirm:
+     - You have access to any required infrastructure (cluster, scheduler, credentials, GPUs, datasets).
+     - The expected runtime fits the session — multi-hour HPC allocations, jobs requiring an interactive `salloc`/`sbatch` session you cannot hold open, or runs that depend on a human-supervised environment do NOT fit.
+     - If either check fails, do NOT include the issue in a batch and do NOT open a "tooling-only" PR for it. Instead, label it `needs-human` and comment why:
+       ```bash
+       gh issue edit <number> --add-label "needs-human" --remove-label "audit-loop"
+       gh issue comment <number> --body "$(cat <<'EOF'
+       Cannot be addressed by the address agent: <reason — e.g., requires NERSC salloc allocation that cannot be held open across a chat turn>. Deferring to human operator.
+       EOF
+       )"
+       ```
+       Move on. NEVER substitute a code/tooling change for an unfulfilled `kind:execute` issue, and NEVER write `Closes #<number>` for a `kind:execute` issue in a PR that does not actually produce the listed artifacts.
 
    If an issue fails validation, comment explaining what's unclear and remove the `audit-loop` label so it drops out of the batch:
    ```bash
@@ -495,6 +507,12 @@ Update state.json: set `last_trigger` to `ADDRESS: revise PR #N`, update `last_t
    Write all hypotheses to `.audit-loop/batch-<N>-hypotheses.md`. Do not edit any source files until hypotheses are written for all issues in the batch.
 
    If you cannot write a confident hypothesis after reading the file and issue body, add a comment to the GitHub issue asking for clarification, remove the `in-progress` label, and skip this issue (move it to the next batch).
+
+   **4a-execute. For `kind:execute` issues**, the "fix" is running the command and producing the artifacts named in the issue body — not editing source files. After the run completes:
+   - Run each shell command in the issue's `## Acceptance Criteria` block yourself and verify it exits 0 / matches the expected output.
+   - Commit ONLY the produced artifacts (and any incidental log/metadata files the command writes into the repo). Do not bundle unrelated code changes.
+   - If the command requires editing the codebase to make it run (e.g. flag plumbing, env-var hygiene), that change belongs in a *separate* `kind:change` issue/PR that this execute-issue depends on — not silently in this PR. If you discover such a prerequisite mid-run, stop, file the change issue, label the execute issue blocked-on that issue, and exit the batch.
+   - You MUST NOT swap a `kind:execute` issue for a tooling/refactor PR. If the run cannot complete in this session, treat it like the validation step in Step 6 above: label `needs-human`, comment why, and move on. Do not write `Closes #<execute-issue>` in a PR whose diff does not contain the produced artifacts.
 
    **4b. Fix each issue:**
 

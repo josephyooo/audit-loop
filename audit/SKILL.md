@@ -254,6 +254,7 @@ Ensure labels exist (run once):
 ```bash
 for label in audit-loop severity:critical severity:high severity:medium severity:low \
   cat:security cat:correctness cat:performance cat:maintainability cat:dependency \
+  kind:change kind:execute \
   needs-human tests-failing in-progress fix-submitted fix-verified; do
   gh label create "$label" --force 2>/dev/null
 done
@@ -355,6 +356,17 @@ Update state.json: set `phase` to `reviewing`, `current_pr` to N, update `last_t
    ```
 
 3. For each issue the PR claims to address, verify the fix is correct and complete.
+
+   **3a. Execute-issue gate (MANDATORY).** For each issue number `X` cited by the PR body's `Closes #X` lines, check whether it carries `kind:execute`:
+   ```bash
+   gh issue view X --json labels --jq '.labels[].name' | grep -qx 'kind:execute' && echo execute || echo change
+   ```
+   If `execute`:
+   - Re-read issue `X`'s body. Extract every shell command listed under `## Acceptance Criteria` verbatim.
+   - Run each command yourself in the audit working tree (after checking out the PR branch with `gh pr checkout N`). Record the exit code and a short output excerpt for each.
+   - You MUST NOT accept the PR's own "Test plan" or self-reported verification as a substitute. The acceptance-criteria block in the issue body is the only source of truth.
+   - If any acceptance-criteria command fails, OR the PR diff contains no commit that produces the artifacts named in the issue's `## Files` section, request changes with the `WRONG` classifier and the body line: `Issue #X is kind:execute. Acceptance criteria require <quote the failing check>; the PR contains tooling/code changes only and the artifacts do not exist.` Do NOT approve.
+   - A PR that explicitly says it does not run the command (e.g. "the actual run was not executed in this turn", "operator-driven next step", "tooling-only") MUST NOT close a `kind:execute` issue. Either request changes (so the address agent runs it) or instruct the address agent to label issue `X` `needs-human` and remove `Closes #X` from the PR body. Do not approve until one of those happens.
 
 4. Check for regressions or new issues introduced by the changes.
 

@@ -40,7 +40,8 @@ Turn a plan into GitHub issues so the `/address` agent (or a human) can pick the
      - perf, latency, cache, throughput, query hot path -> `cat:performance`
      - dependency, upgrade, version, package, library -> `cat:dependency`
      - otherwise -> `cat:maintainability`
-   - Only emit labels from the supported set above; do not invent new `severity:*` or `cat:*` labels at issue-creation time
+   - `kind_label`: from Step 2's classification — `kind:change` or `kind:execute`. ALWAYS apply this label. The audit agent uses it to decide whether artifact verification is mandatory.
+   - Only emit labels from the supported set above; do not invent new `severity:*`, `cat:*`, or `kind:*` labels at issue-creation time
 
 5. For each step, create an issue using the appropriate template:
 
@@ -49,6 +50,7 @@ Turn a plan into GitHub issues so the `/address` agent (or a human) can pick the
    gh issue create \
      --title "<concise step title>" \
      --label "audit-loop" \
+     --label "kind:change" \
      --label "<severity_label>" \
      --label "<category_label>" \
      --body "$(cat <<'EOF'
@@ -70,6 +72,7 @@ Turn a plan into GitHub issues so the `/address` agent (or a human) can pick the
    gh issue create \
      --title "<concise step title>" \
      --label "audit-loop" \
+     --label "kind:execute" \
      --label "<severity_label>" \
      --label "<category_label>" \
      --body "$(cat <<'EOF'
@@ -87,6 +90,9 @@ Turn a plan into GitHub issues so the `/address` agent (or a human) can pick the
    ## Acceptance Criteria
    - <verifiable by a shell command: output file exists, row count matches, script exits 0>
    - <verifiable by a shell command>
+
+   ## Closure Policy
+   This issue is `kind:execute`. It is NOT closed by a code-only PR that adds tooling, refactors the pipeline, or makes the run "easier to invoke." Closure requires the listed artifacts to exist on disk and the acceptance-criteria shell commands to pass against those artifacts. If the addressing agent lacks the infrastructure to run the command (no cluster access, prohibitive runtime, missing credentials), it MUST label this issue `needs-human` instead of opening a tooling-only PR that claims to "address" it.
    EOF
    )"
    ```
